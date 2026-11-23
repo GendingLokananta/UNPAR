@@ -7,6 +7,8 @@ const {
   drawOne,
   passTurn,
   publicState,
+  GAME_MODES,
+  normalizeGameMode,
 } = require('../src/game');
 
 function players(count) {
@@ -16,6 +18,26 @@ function players(count) {
     connected: true,
   }));
 }
+
+test('game mode defaults to UNO Classic for older clients', () => {
+  assert.equal(normalizeGameMode(undefined), GAME_MODES.CLASSIC);
+  assert.equal(normalizeGameMode(''), GAME_MODES.CLASSIC);
+});
+
+test('game mode accepts UNO Classic and UNOLLELE', () => {
+  assert.equal(normalizeGameMode('classic'), GAME_MODES.CLASSIC);
+  assert.equal(normalizeGameMode('UNOLLELE'), GAME_MODES.UNOLLELE);
+});
+
+test('game mode rejects unknown values', () => {
+  assert.throws(() => normalizeGameMode('pokemon'), /Mode permainan tidak dikenal/);
+});
+
+test('public room state includes its selected game mode', () => {
+  const roomPlayers = players(2);
+  const room = { code: 'ABC234', gameMode: 'unollele', status: 'lobby', hostId: roomPlayers[0].id, players: roomPlayers };
+  assert.equal(publicState(room, roomPlayers[0].id).room.gameMode, 'unollele');
+});
 
 test('classic deck contains 108 cards', () => {
   assert.equal(createDeck().length, 108);

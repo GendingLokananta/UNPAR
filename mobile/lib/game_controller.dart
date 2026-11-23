@@ -167,10 +167,14 @@ class GameController extends ChangeNotifier {
     }
   }
 
-  Future<void> createRoom() async {
+  Future<void> createRoom({String gameMode = 'classic'}) async {
     await _performBusy(() async {
       await _ensureConnected();
-      final result = await _emitAck('create_room', {'playerId': playerId, 'name': nickname});
+      final result = await _emitAck('create_room', {
+        'playerId': playerId,
+        'name': nickname,
+        'gameMode': gameMode,
+      });
       _acceptJoinResult(result);
     });
   }

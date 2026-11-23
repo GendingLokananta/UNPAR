@@ -1,86 +1,85 @@
 # UNO Party — Android + laptop server
 
-UNO Party adalah game kartu gaya UNO untuk Android. Aplikasi Flutter terhubung ke server Node.js yang dijalankan di laptop menggunakan Socket.IO.
+UNO Party adalah game kartu multiplayer untuk Android. Aplikasi Flutter terhubung ke server Node.js menggunakan Socket.IO. Satu room dapat menggunakan mode UNO Classic atau UNOLLELE.
 
-## Yang sudah ada di versi awal
+## Fitur
 
+### Sistem bersama
 - Room privat dengan kode 6 karakter.
-- 2 sampai 8 pemain per room.
-- Host bisa mulai saat minimal 2 pemain terhubung; tidak perlu menunggu 8 slot terisi.
-- Kartu klasik 108 kartu dan 7 kartu awal per pemain.
-- Angka, Skip, Reverse, Draw Two, Wild, dan Wild Draw Four.
-- Giliran dan validasi kartu ditangani server.
-- Setiap HP hanya menerima isi tangan kartunya sendiri; kartu lawan tidak dikirim ke perangkat lain.
+- Host memilih mode UNO Classic atau UNOLLELE saat membuat room.
+- 2 sampai 8 pemain per room; host dapat mulai setelah minimal 2 pemain terhubung.
+- Lobby menampilkan mode, kode room, pemain, status koneksi, dan host.
+- Socket.IO realtime, reconnect dan rejoin room.
+- Server menjadi sumber kebenaran untuk validasi kartu, giliran, efek, dan pemenang.
+- Setiap HP hanya menerima isi kartu miliknya; isi kartu lawan tidak dikirim ke perangkat lain.
 - Tombol UNO dan Tangkap UNO (+2).
-- Reconnect otomatis saat koneksi terputus di tengah pertandingan, selama server laptop tetap hidup.
-- APK dapat dibangun melalui GitHub Actions.
 
-Versi ini memakai aturan dasar klasik: kartu Draw Two / Wild Draw Four tidak bisa ditumpuk. Belum ada akun permanen, random matchmaking, chat, statistik, atau sistem ranking.
+### UNO Classic
+- Deck klasik 108 kartu dan 7 kartu awal per pemain.
+- Angka, Skip, Reverse, Draw Two, Wild, dan Wild Draw Four.
+- Draw, pass turn, dan validasi mengikuti implementasi UNO Classic yang sudah ada.
+- Draw Two / Wild Draw Four tidak dapat ditumpuk.
 
-## A. Jalankan server di Windows
+### UNOLLELE
+- Deck 136 kartu: 120 kartu angka + 16 kartu Dragon.
+- Enam elemen angka: Fire, Water, Grass, Electric, Ground, Colorless; angka 1–10, dua copy per kombinasi.
+- Empat efek Dragon, masing-masing empat copy: Skip, Switch Direction, +2, Reset.
+- Lima kartu awal untuk setiap pemain.
+- Sistem weakness, angka lebih tinggi untuk tipe yang sama, dan Colorless bernomor lebih tinggi di atas elemen lain.
+- Dragon hanya dapat dimainkan di atas Colorless; di atas Dragon, kartu angka dari semua enam elemen dapat dimainkan.
+- Dragon Skip, Dragon Switch Direction, Dragon +2, dan Dragon Reset diproses oleh server.
+- Jika tidak ada kartu valid, pemain mengambil satu kartu dan giliran langsung dilewati.
+- UI kartu elemental/Dragon dan petunjuk aturan kartu aktif.
 
-1. Install Node.js LTS dari <https://nodejs.org/>. Node.js 22 atau yang lebih baru didukung.
-2. Ekstrak folder proyek ini di laptop.
-3. Klik dua kali `start-server.bat`.
-4. Saat pertama dijalankan, script akan mengunduh dependency melalui `npm install`.
-5. Pastikan terminal menampilkan `UNO Party server berjalan di http://0.0.0.0:3000`.
-6. Tes di browser laptop: buka `http://localhost:3000/health`. Hasil yang benar adalah JSON dengan `"ok": true`.
+## Menjalankan server di Windows
 
-Jangan tutup terminal server selama pertandingan berlangsung.
+1. Install Node.js 22 atau lebih baru.
+2. Ekstrak folder proyek.
+3. Klik dua kali `start-server.bat` (dependency diinstal otomatis saat pertama dijalankan).
+4. Pastikan terminal menunjukkan server berjalan pada port 3000.
+5. Tes endpoint `http://localhost:3000/health`.
 
-## B. Main dari HP dalam Wi-Fi yang sama
+Jangan tutup terminal server selama pertandingan.
 
-1. Pastikan laptop dan semua HP memakai jaringan Wi-Fi yang sama.
-2. Di laptop, buka Command Prompt dan ketik `ipconfig`.
-3. Cari `IPv4 Address` pada adapter Wi-Fi, misalnya `192.168.1.20`.
-4. Jika Windows Firewall bertanya, izinkan Node.js untuk jaringan Private.
-5. Di aplikasi, isi **Alamat server laptop** dengan alamat seperti `http://192.168.1.20:3000`.
-6. Semua teman memasukkan alamat server yang sama.
+## Bermain melalui Wi-Fi lokal
 
-Alamat IP di atas hanya contoh. Gunakan alamat IPv4 yang muncul di laptopmu.
+1. Hubungkan laptop dan HP ke Wi-Fi yang sama.
+2. Jalankan `ipconfig` di laptop dan cari IPv4 adapter Wi-Fi.
+3. Izinkan Node.js di Windows Firewall untuk jaringan Private bila diminta.
+4. Isi URL server di aplikasi, contoh `http://192.168.1.20:3000`.
+5. Semua pemain memasukkan URL server yang sama.
 
-## C. Main dari jaringan internet yang berbeda
+## Bermain melalui internet
 
-Untuk tes awal, proyek ini menyertakan `start-tunnel.bat` yang menggunakan Cloudflare Quick Tunnel.
+1. Jalankan server.
+2. Jalankan `start-tunnel.bat` dengan `cloudflared` terpasang.
+3. Masukkan URL HTTPS `trycloudflare.com` yang ditampilkan ke aplikasi.
+4. Bagikan URL dan kode room kepada teman.
 
-1. Biarkan server Node.js tetap berjalan.
-2. Install `cloudflared` di Windows. Panduan resmi: <https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/tunnel-guide/>
-3. Klik dua kali `start-tunnel.bat`.
-4. Salin alamat HTTPS `https://....trycloudflare.com` yang muncul di terminal.
-5. Masukkan alamat HTTPS tersebut ke kolom **Alamat server laptop** di aplikasi. Jangan tambahkan `:3000` pada alamat tunnel.
-6. Bagikan alamat server dan kode room kepada teman.
-7. Biarkan kedua jendela terminal (server dan tunnel) tetap terbuka.
+Quick Tunnel bersifat sementara untuk testing; alamat berubah saat tunnel dibuat ulang. Jangan bagikan URL server ke publik.
 
-Quick Tunnel memberikan alamat sementara yang berubah saat tunnel dibuat ulang. Tunnel berhenti bekerja saat proses `cloudflared` ditutup. Cloudflare menyebut Quick Tunnel sebagai fitur untuk testing/development, tanpa jaminan uptime; gunakan tunnel permanen atau server hosting untuk penggunaan jangka panjang. Detail: <https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/>.
+## Build APK melalui GitHub Actions
 
-Siapa pun yang mengetahui URL Quick Tunnel dapat mencoba mengakses server. Bagikan hanya kepada teman yang kamu percaya.
+1. Push isi proyek ke repository GitHub.
+2. Buka **Actions**.
+3. Pilih **Build Android APK**, lalu **Run workflow**.
+4. Unduh artifact `uno-party-android-apk` setelah workflow sukses.
 
-## D. Build APK dengan GitHub Actions
+APK release belum memakai signing key khusus; cocok untuk pengujian langsung, bukan publikasi Play Store.
 
-1. Buat repository GitHub baru.
-2. Upload seluruh isi folder proyek ini ke repository (jangan upload `node_modules`).
-3. Buka tab **Actions**.
-4. Pilih workflow **Build Android APK** lalu tekan **Run workflow**. Workflow juga berjalan saat ada perubahan pada folder `mobile/` yang di-push ke branch `main` atau `master`.
-5. Setelah selesai, buka hasil run dan unduh artifact `uno-party-android-apk`.
-6. Di dalam artifact ada `app-release.apk`.
+## Tes backend
 
-Workflow membuat kerangka Android dengan Flutter, mengambil dependency, lalu membangun APK release. Belum ada signing key khusus, jadi APK ini cocok untuk instalasi dan pengujian langsung. Untuk distribusi Play Store, siapkan signing key sendiri.
-
-## E. Tes server
-
-Di folder `server/`, jalankan:
+Di folder `server/` jalankan:
 
 ```bash
 npm install
 npm test
 ```
 
-Tes backend saat proyek ini disusun: 6 tes lulus.
+Tes saat build 1.1.0+3: 30 tes lulus (10 UNO Classic, 20 UNOLLELE). Pengujian mencakup transisi giliran dan state untuk beberapa pemain; pengujian Socket.IO live serta APK tetap perlu dijalankan pada lingkungan perangkat/build Flutter.
 
-## Catatan penting
+## Batasan yang masih ada
 
-- Laptop bertindak sebagai server. Laptop harus menyala, tidak sleep, terhubung internet, dan proses Node.js tetap berjalan agar teman dari luar jaringan bisa bermain.
-- Data room disimpan di memori server. Mematikan atau restart server akan menghapus semua room dan pertandingan yang sedang berjalan.
-- Jika laptop tidur, mati, atau koneksi internet putus, permainan online ikut terhenti.
-- Versi ini belum memakai database persisten atau autentikasi akun. Gunakan kode room privat dan jangan bagikan URL server ke publik.
-- Aplikasi Android harus memakai URL yang dapat dijangkau HP: `http://IP-LAPTOP:3000` untuk Wi-Fi lokal, atau URL HTTPS tunnel untuk internet.
+- Data room disimpan di memori server; restart server menghapus room dan pertandingan.
+- Belum ada akun permanen, matchmaking publik, chat, statistik, leaderboard, bot, atau database persisten.
+- Build dan pengujian UI Android perlu dijalankan melalui Flutter SDK/GitHub Actions; lingkungan penyusunan source ini tidak menyediakan Flutter SDK.

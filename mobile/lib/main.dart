@@ -94,7 +94,76 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _create() async {
-    if (await _prepare()) await widget.controller.createRoom();
+    final gameMode = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: panelColor,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 22, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('PILIH MODE PERMAINAN', textAlign: TextAlign.center, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900, letterSpacing: 1.1)),
+              const SizedBox(height: 7),
+              const Text('Tentukan mode yang akan digunakan di room ini.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 12)),
+              const SizedBox(height: 18),
+              _gameModeOption(
+                sheetContext,
+                mode: 'classic',
+                title: 'UNO',
+                subtitle: 'Aturan dan kartu UNO klasik',
+                icon: Icons.style_rounded,
+                color: accentColor,
+              ),
+              const SizedBox(height: 10),
+              _gameModeOption(
+                sheetContext,
+                mode: 'unollele',
+                title: 'UNOLLELE',
+                subtitle: 'Kartu elemental, weakness, dan Dragon',
+                icon: Icons.auto_awesome_rounded,
+                color: const Color(0xFFB58BFF),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted || gameMode == null) return;
+    if (await _prepare()) await widget.controller.createRoom(gameMode: gameMode);
+  }
+
+  Widget _gameModeOption(
+    BuildContext sheetContext, {
+    required String mode,
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Material(
+      color: const Color(0xFF252C3B),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: () => Navigator.pop(sheetContext, mode),
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(children: [
+            Container(width: 48, height: 48, decoration: BoxDecoration(color: color.withOpacity(.16), borderRadius: BorderRadius.circular(14)), child: Icon(icon, color: color, size: 27)),
+            const SizedBox(width: 13),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(title, style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: .7)),
+              const SizedBox(height: 3),
+              Text(subtitle, style: const TextStyle(color: Colors.white60, fontSize: 12)),
+            ])),
+            const Icon(Icons.chevron_right_rounded, color: Colors.white54, size: 25),
+          ]),
+        ),
+      ),
+    );
   }
 
   Future<void> _join() async {
@@ -206,6 +275,8 @@ class LobbyScreen extends StatelessWidget {
     final players = (room['players'] as List? ?? []).map((item) => GameController.mapData(item)).toList();
     final isHost = room['hostId'] == controller.myId;
     final canStart = isHost && players.where((p) => p['connected'] == true).length >= 2;
+    final gameMode = (room['gameMode'] ?? 'classic').toString();
+    final isUnollele = gameMode == 'unollele';
     return Scaffold(
       appBar: AppBar(
         title: const Text('ROOM LOBBY', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.2)),
@@ -219,6 +290,23 @@ class LobbyScreen extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: isUnollele ? const Color(0xFF33264A) : const Color(0xFF3A3420),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: isUnollele ? const Color(0xFF8F6BC4) : accentColor.withOpacity(.45)),
+                  ),
+                  child: Row(children: [
+                    Icon(isUnollele ? Icons.auto_awesome_rounded : Icons.style_rounded, color: isUnollele ? const Color(0xFFB58BFF) : accentColor),
+                    const SizedBox(width: 10),
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(isUnollele ? 'MODE UNOLLELE' : 'MODE UNO', style: TextStyle(color: isUnollele ? const Color(0xFFD6C1FF) : accentColor, fontWeight: FontWeight.w900, letterSpacing: .8)),
+                      Text(isUnollele ? 'Elemental • Weakness • Dragon' : 'Aturan UNO klasik', style: const TextStyle(color: Colors.white60, fontSize: 11)),
+                    ])),
+                  ]),
+                ),
+                const SizedBox(height: 14),
                 Container(
                   padding: const EdgeInsets.all(22),
                   decoration: BoxDecoration(color: panelColor, borderRadius: BorderRadius.circular(22), border: Border.all(color: Colors.white10)),
@@ -260,12 +348,18 @@ class LobbyScreen extends StatelessWidget {
                 const SizedBox(height: 8),
                 Container(padding: const EdgeInsets.all(14), decoration: BoxDecoration(color: const Color(0xFF252B37), borderRadius: BorderRadius.circular(14)), child: const Text('Permainan bisa dimulai saat minimal 2 pemain sudah masuk. Tidak perlu menunggu sampai 8 pemain.', style: TextStyle(color: Colors.white70, height: 1.4, fontSize: 13))),
                 const SizedBox(height: 20),
+                if (isUnollele)
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(color: const Color(0xFF33264A), borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFF8F6BC4).withOpacity(.5))),
+                    child: const Text('UNOLLELE: 6 tipe elemental, sistem weakness, dan 4 efek kartu Dragon. Setiap pemain akan mendapat 5 kartu.', style: TextStyle(color: Color(0xFFE2D5FF), height: 1.45, fontSize: 12)),
+                  ),
                 if (isHost)
                   FilledButton.icon(
                     onPressed: canStart ? controller.startGame : null,
                     icon: const Icon(Icons.play_arrow_rounded),
                     label: const Text('MULAI PERMAINAN'),
-                    style: FilledButton.styleFrom(backgroundColor: accentColor, foregroundColor: const Color(0xFF211D29), minimumSize: const Size.fromHeight(54), textStyle: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: .8)),
+                    style: FilledButton.styleFrom(backgroundColor: isUnollele ? const Color(0xFFB58BFF) : accentColor, foregroundColor: const Color(0xFF211D29), minimumSize: const Size.fromHeight(54), textStyle: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: .8)),
                   )
                 else
                   const Padding(padding: EdgeInsets.all(12), child: Text('Menunggu host memulai permainan…', textAlign: TextAlign.center, style: TextStyle(color: Colors.white54))),
@@ -317,6 +411,7 @@ class GameScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final room = controller.room;
     final game = controller.game;
+    final isUnollele = room['gameMode'] == 'unollele';
     final players = (room['players'] as List? ?? []).map((item) => GameController.mapData(item)).toList();
     final hand = (game['hand'] as List? ?? []).map((item) => GameController.mapData(item)).toList();
     final playableIds = (game['playableCardIds'] as List? ?? []).map((item) => item.toString()).toSet();
@@ -328,7 +423,7 @@ class GameScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Row(children: [const Text('UNO PARTY', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1)), const SizedBox(width: 10), Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4), decoration: BoxDecoration(color: panelColor, borderRadius: BorderRadius.circular(7)), child: Text(room['code']?.toString() ?? '', style: const TextStyle(fontSize: 11, letterSpacing: 1.5, color: accentColor, fontWeight: FontWeight.bold)))]),
+        title: Row(children: [Text(isUnollele ? 'UNOLLELE' : 'UNO PARTY', style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1)), const SizedBox(width: 10), Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4), decoration: BoxDecoration(color: panelColor, borderRadius: BorderRadius.circular(7)), child: Text(room['code']?.toString() ?? '', style: const TextStyle(fontSize: 11, letterSpacing: 1.5, color: accentColor, fontWeight: FontWeight.bold)))]),
         actions: [IconButton(onPressed: () => controller.leaveRoom(), icon: const Icon(Icons.exit_to_app_rounded), tooltip: 'Keluar permainan')],
       ),
       body: SafeArea(
@@ -381,7 +476,12 @@ class GameScreen extends StatelessWidget {
                         const SizedBox(height: 6),
                         CardFace(card: topCard, width: 82, height: 120),
                         const SizedBox(height: 8),
-                        Row(children: [const Text('Warna: ', style: TextStyle(color: Colors.white54, fontSize: 11)), Container(width: 13, height: 13, decoration: BoxDecoration(color: _colorFor(game['currentColor']?.toString()), shape: BoxShape.circle, border: Border.all(color: Colors.white38))), const SizedBox(width: 5), Text(game['currentColor']?.toString().toUpperCase() ?? '-', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold))]),
+                        if (isUnollele) ...[
+                          Text('TIPE: ${(topCard['element'] ?? '-').toString().toUpperCase()}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFFD6C1FF))),
+                          const SizedBox(height: 4),
+                          SizedBox(width: 150, child: Text(_unolleleRuleHint(topCard), textAlign: TextAlign.center, style: const TextStyle(fontSize: 9, color: Colors.white60, height: 1.25))),
+                        ] else
+                          Row(children: [const Text('Warna: ', style: TextStyle(color: Colors.white54, fontSize: 11)), Container(width: 13, height: 13, decoration: BoxDecoration(color: _colorFor(game['currentColor']?.toString()), shape: BoxShape.circle, border: Border.all(color: Colors.white38))), const SizedBox(width: 5), Text(game['currentColor']?.toString().toUpperCase() ?? '-', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold))]),
                       ]),
                       const SizedBox(width: 28),
                       Column(children: [
@@ -444,19 +544,29 @@ class GameScreen extends StatelessWidget {
               if (room['status'] == 'finished')
                 FilledButton.icon(onPressed: controller.leaveRoom, icon: const Icon(Icons.home_rounded), label: const Text('KEMBALI KE BERANDA'), style: FilledButton.styleFrom(backgroundColor: accentColor, foregroundColor: Colors.black, minimumSize: const Size.fromHeight(48)))
               else ...[
-                Row(children: [
-                  Expanded(child: FilledButton.icon(
-                    onPressed: myTurn && game['turnHasDrawn'] != true ? controller.drawCard : null,
-                    icon: const Icon(Icons.add_card_rounded), label: const Text('AMBIL KARTU'),
-                    style: FilledButton.styleFrom(backgroundColor: accentColor, foregroundColor: Colors.black, disabledBackgroundColor: Colors.white12, disabledForegroundColor: Colors.white30, minimumSize: const Size.fromHeight(48), textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900)),
+                if (isUnollele) ...[
+                  SizedBox(width: double.infinity, child: FilledButton.icon(
+                    onPressed: myTurn && game['canDraw'] == true ? controller.drawCard : null,
+                    icon: const Icon(Icons.add_card_rounded),
+                    label: const Text('AMBIL 1 KARTU  •  GILIRAN LANGSUNG DILEWATI'),
+                    style: FilledButton.styleFrom(backgroundColor: const Color(0xFFB58BFF), foregroundColor: const Color(0xFF211D29), disabledBackgroundColor: Colors.white12, disabledForegroundColor: Colors.white30, minimumSize: const Size.fromHeight(48), textStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900)),
                   )),
-                  const SizedBox(width: 8),
-                  Expanded(child: OutlinedButton.icon(
-                    onPressed: myTurn && game['turnHasDrawn'] == true ? controller.passTurn : null,
-                    icon: const Icon(Icons.skip_next_rounded), label: const Text('LEWATI'),
-                    style: OutlinedButton.styleFrom(foregroundColor: Colors.white, disabledForegroundColor: Colors.white30, side: const BorderSide(color: Colors.white30), minimumSize: const Size.fromHeight(48), textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900)),
-                  )),
-                ]),
+                  if (myTurn && playableIds.isNotEmpty)
+                    const Padding(padding: EdgeInsets.only(top: 7), child: Text('Pilih salah satu kartu yang menyala; kamu masih memiliki kartu valid.', textAlign: TextAlign.center, style: TextStyle(fontSize: 10, color: Colors.white54))),
+                ] else
+                  Row(children: [
+                    Expanded(child: FilledButton.icon(
+                      onPressed: myTurn && game['turnHasDrawn'] != true ? controller.drawCard : null,
+                      icon: const Icon(Icons.add_card_rounded), label: const Text('AMBIL KARTU'),
+                      style: FilledButton.styleFrom(backgroundColor: accentColor, foregroundColor: Colors.black, disabledBackgroundColor: Colors.white12, disabledForegroundColor: Colors.white30, minimumSize: const Size.fromHeight(48), textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900)),
+                    )),
+                    const SizedBox(width: 8),
+                    Expanded(child: OutlinedButton.icon(
+                      onPressed: myTurn && game['turnHasDrawn'] == true ? controller.passTurn : null,
+                      icon: const Icon(Icons.skip_next_rounded), label: const Text('LEWATI'),
+                      style: OutlinedButton.styleFrom(foregroundColor: Colors.white, disabledForegroundColor: Colors.white30, side: const BorderSide(color: Colors.white30), minimumSize: const Size.fromHeight(48), textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900)),
+                    )),
+                  ]),
                 if (pendingUno != null) ...[
                   const SizedBox(height: 8),
                   SizedBox(width: double.infinity, child: FilledButton(
@@ -484,6 +594,59 @@ class CardFace extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (card['type'] == 'number' || card['type'] == 'dragon' || card.containsKey('element')) {
+      return _buildUnolleleCard();
+    }
+    return _buildClassicCard();
+  }
+
+  Widget _buildUnolleleCard() {
+    final element = card['element']?.toString() ?? 'colorless';
+    final isDragon = card['type'] == 'dragon' || element == 'dragon';
+    final color = _elementColor(element);
+    final number = card['number']?.toString() ?? '';
+    final effect = card['effect']?.toString() ?? '';
+    final effectLabel = switch (effect) {
+      'skip' => 'SKIP',
+      'switch_direction' => 'REVERSE',
+      'draw_two' => '+2',
+      'reset' => 'RESET',
+      _ => 'DRAGON',
+    };
+    final icon = isDragon ? Icons.auto_awesome_rounded : _elementIcon(element);
+
+    return Container(
+      width: width,
+      height: height,
+      padding: const EdgeInsets.all(5),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [color, color.withOpacity(.72), const Color(0xFF171923)]),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: glow ? Colors.white : Colors.white70, width: glow ? 2.2 : 1),
+        boxShadow: glow ? [BoxShadow(color: color.withOpacity(.65), blurRadius: 12, spreadRadius: 1)] : const [],
+      ),
+      child: Stack(children: [
+        Positioned(right: -10, top: 12, child: Icon(icon, size: width * .72, color: Colors.white.withOpacity(.10))),
+        Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text(isDragon ? 'DRAGON' : element.toUpperCase(), maxLines: 1, overflow: TextOverflow.clip, style: TextStyle(color: Colors.white, fontSize: width * .115, fontWeight: FontWeight.w900, letterSpacing: .35)),
+          Expanded(child: Center(child: isDragon
+            ? Column(mainAxisSize: MainAxisSize.min, children: [
+                Icon(icon, size: width * .36, color: Colors.white),
+                const SizedBox(height: 3),
+                FittedBox(fit: BoxFit.scaleDown, child: Text(effectLabel, style: TextStyle(color: Colors.white, fontSize: width * .18, fontWeight: FontWeight.w900))),
+              ])
+            : Stack(alignment: Alignment.center, children: [
+                Container(width: width * .64, height: height * .60, decoration: BoxDecoration(color: Colors.white.withOpacity(.91), borderRadius: BorderRadius.circular(40), border: Border.all(color: Colors.black.withOpacity(.12), width: 1.2))),
+                Text(number, style: TextStyle(color: color.computeLuminance() < .36 ? color : Colors.black87, fontSize: width * .48, fontWeight: FontWeight.w900, height: 1)),
+              ]))),
+          Text(isDragon ? 'UNIQUE EFFECT' : 'UNOLLELE', textAlign: TextAlign.center, maxLines: 1, style: TextStyle(color: Colors.white.withOpacity(.9), fontSize: width * .085, fontWeight: FontWeight.w800, letterSpacing: .25)),
+        ]),
+        Positioned(right: 1, top: 0, child: Text(isDragon ? 'D' : number, style: TextStyle(color: Colors.white, fontSize: width * .12, fontWeight: FontWeight.w900))),
+      ]),
+    );
+  }
+
+  Widget _buildClassicCard() {
     final color = _colorFor(card['color']?.toString());
     final value = card['value']?.toString() ?? '?';
     final label = switch (value) {
@@ -511,6 +674,43 @@ class CardFace extends StatelessWidget {
       ]),
     );
   }
+}
+
+Color _elementColor(String element) => switch (element) {
+  'fire' => const Color(0xFFDB492F),
+  'water' => const Color(0xFF247BC3),
+  'grass' => const Color(0xFF29945D),
+  'electric' => const Color(0xFFE0AD20),
+  'ground' => const Color(0xFF8B6543),
+  'colorless' => const Color(0xFF737B89),
+  'dragon' => const Color(0xFF7043A5),
+  _ => const Color(0xFF737B89),
+};
+
+IconData _elementIcon(String element) => switch (element) {
+  'fire' => Icons.local_fire_department_rounded,
+  'water' => Icons.water_drop_rounded,
+  'grass' => Icons.eco_rounded,
+  'electric' => Icons.bolt_rounded,
+  'ground' => Icons.terrain_rounded,
+  'colorless' => Icons.circle_outlined,
+  _ => Icons.style_rounded,
+};
+
+String _unolleleRuleHint(Map<String, dynamic> topCard) {
+  if (topCard['type'] == 'dragon') return 'Semua kartu angka dapat dimainkan; Dragon tidak dapat ditumpuk.';
+  final element = topCard['element']?.toString() ?? '';
+  final number = topCard['number']?.toString() ?? '';
+  const weakness = {
+    'fire': 'Water / Ground',
+    'water': 'Grass / Electric',
+    'grass': 'Fire',
+    'electric': 'Ground',
+    'ground': 'Water / Grass',
+    'colorless': 'Semua elemen + Dragon',
+  };
+  final weakTypes = weakness[element] ?? '-';
+  return 'Angka $element / Colorless harus lebih tinggi dari $number; weakness: $weakTypes';
 }
 
 class NoticeBanner extends StatelessWidget {

@@ -111,12 +111,14 @@ io.on('connection', (socket) => {
     try {
       const playerId = safePlayerId(payload.playerId);
       const name = safeName(payload.name);
+      const gameMode = gameEngine.normalizeGameMode(payload.gameMode);
       const oldRoom = findRoomForPlayer(playerId);
       if (oldRoom) throw new Error('Kamu masih berada di room lain. Keluar dulu dari room itu.');
       const code = generateRoomCode();
       const room = {
         code,
         hostId: playerId,
+        gameMode,
         status: 'lobby',
         players: [{ id: playerId, name, connected: true, socketId: socket.id }],
         game: null,
@@ -179,7 +181,7 @@ io.on('connection', (socket) => {
     if (connected.length < gameEngine.MIN_PLAYERS) throw new Error('Minimal 2 pemain untuk memulai.');
     if (connected.length > gameEngine.MAX_PLAYERS) throw new Error('Maksimal 8 pemain.');
     room.players = connected;
-    room.game = gameEngine.createGame(connected);
+    room.game = gameEngine.createGameForMode(connected, room.gameMode);
     room.status = 'playing';
   });
 
