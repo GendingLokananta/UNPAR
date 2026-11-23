@@ -10,9 +10,11 @@ UNO Party adalah game kartu multiplayer untuk Android. Aplikasi Flutter terhubun
 - 2 sampai 8 pemain per room; host dapat mulai setelah minimal 2 pemain terhubung.
 - Lobby menampilkan mode, kode room, pemain, status koneksi, dan host.
 - Socket.IO realtime, reconnect dan rejoin room.
-- Server menjadi sumber kebenaran untuk validasi kartu, giliran, efek, dan pemenang.
-- Setiap HP hanya menerima isi kartu miliknya; isi kartu lawan tidak dikirim ke perangkat lain.
-- Tombol UNO dan Tangkap UNO (+2).
+- Server menjadi sumber kebenaran untuk validasi kartu, giliran, efek, timer, voting rematch, dan pemenang.
+- Setiap HP hanya menerima isi kartu miliknya; isi kartu lawan tetap tersembunyi.
+- Timer 15 detik per giliran untuk kedua mode; jika habis, pemain otomatis mengambil 2 kartu dan gilirannya dilewati.
+- Setelah permainan selesai, pemain melakukan voting rematch. Jika suara setuju mencapai mayoritas pemain online, pertandingan baru dimulai di room dan kode yang sama.
+- Musik latar lobby, musik pertandingan, dan musik lebih intens ketika ada pemain aktif dengan 1–2 kartu tersisa; musik dapat dimatikan dari tombol volume.
 
 ### UNO Classic
 - Deck klasik 108 kartu dan 7 kartu awal per pemain.
@@ -21,15 +23,15 @@ UNO Party adalah game kartu multiplayer untuk Android. Aplikasi Flutter terhubun
 - Draw Two / Wild Draw Four tidak dapat ditumpuk.
 
 ### UNOLLELE
-- Deck 136 kartu: 120 kartu angka + 16 kartu Dragon.
-- Enam elemen angka: Fire, Water, Grass, Electric, Ground, Colorless; angka 1–10, dua copy per kombinasi.
+- Deck 126 kartu: 100 kartu Fire/Water/Grass/Electric/Ground (masing-masing angka 1–10, dua copy), 10 kartu Colorless (angka 1–10, satu copy), dan 16 kartu Dragon.
+- Setiap pemain menerima 7 kartu awal.
+- Lima elemen dasar mengikuti aturan weakness; Colorless merupakan kartu universal yang dapat melawan semua tipe angka. Pada Colorless yang menjadi top pile, kartu Colorless berikutnya harus memiliki angka lebih tinggi.
+- Semua kartu angka memiliki weakness terhadap Dragon: Dragon dapat dimainkan di atas semua kartu angka. Dragon tidak dapat ditumpuk di atas Dragon.
+- Di atas Dragon, semua kartu angka dari enam elemen dapat dimainkan.
 - Empat efek Dragon, masing-masing empat copy: Skip, Switch Direction, +2, Reset.
-- Lima kartu awal untuk setiap pemain.
-- Sistem weakness, angka lebih tinggi untuk tipe yang sama, dan Colorless bernomor lebih tinggi di atas elemen lain.
-- Dragon hanya dapat dimainkan di atas Colorless; di atas Dragon, kartu angka dari semua enam elemen dapat dimainkan.
-- Dragon Skip, Dragon Switch Direction, Dragon +2, dan Dragon Reset diproses oleh server.
-- Jika tidak ada kartu valid, pemain mengambil satu kartu dan giliran langsung dilewati.
-- UI kartu elemental/Dragon dan petunjuk aturan kartu aktif.
+- Pemain boleh memilih mengambil 1 kartu walaupun masih memiliki kartu yang bisa dimainkan; setelah draw, giliran langsung dilewati.
+- Kartu elemental dan Dragon memiliki desain visual khusus.
+- Meja bermain menempatkan pemain melingkar sesuai urutan dan arah permainan, dengan penanda giliran dan countdown.
 
 ## Menjalankan server di Windows
 
@@ -76,7 +78,7 @@ npm install
 npm test
 ```
 
-Tes saat build 1.1.0+3: 30 tes lulus (10 UNO Classic, 20 UNOLLELE). Pengujian mencakup transisi giliran dan state untuk beberapa pemain; pengujian Socket.IO live serta APK tetap perlu dijalankan pada lingkungan perangkat/build Flutter.
+Tes backend pada build ini mencakup UNO Classic, deck/aturan UNOLLELE, timeout, dan voting rematch; jalankan `npm test` untuk hasil terkini. Pengujian mencakup transisi giliran dan state untuk beberapa pemain; pengujian Socket.IO live serta APK tetap perlu dijalankan pada lingkungan perangkat/build Flutter.
 
 ## Batasan yang masih ada
 

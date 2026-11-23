@@ -9,6 +9,8 @@ const {
   publicState,
   GAME_MODES,
   normalizeGameMode,
+  timeoutTurn,
+  TURN_DURATION_MS,
 } = require('../src/game');
 
 function players(count) {
@@ -78,4 +80,23 @@ test('draw then pass advances the turn', () => {
   passTurn(room, first);
   assert.notEqual(room.game.currentPlayerId, first);
   assert.equal(room.game.turnHasDrawn, false);
+});
+
+
+test('15-second timeout also draws two cards and skips the turn in UNO Classic', () => {
+  const roomPlayers = players(2);
+  const game = createGame(roomPlayers);
+  const activeId = game.currentPlayerId;
+  game.deck = [
+    { id: 'timeout-a', color: 'red', value: '4' },
+    { id: 'timeout-b', color: 'blue', value: '8' },
+  ];
+  const otherId = roomPlayers.find((player) => player.id !== activeId).id;
+  const room = { code: 'CLASS1', gameMode: 'classic', status: 'playing', hostId: roomPlayers[0].id, players: roomPlayers, game };
+  const beforeCount = game.hands[activeId].length;
+  assert.equal(TURN_DURATION_MS, 15000);
+  assert.equal(timeoutTurn(room), true);
+  assert.equal(game.hands[activeId].length, beforeCount + 2);
+  assert.equal(game.currentPlayerId, otherId);
+  assert.match(game.lastMove, /Waktu habis/);
 });

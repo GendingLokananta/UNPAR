@@ -1,7 +1,11 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'game_controller.dart';
+import 'music_manager.dart';
 
 const Color pageColor = Color(0xFF10131D);
 const Color panelColor = Color(0xFF1C2230);
@@ -15,12 +19,15 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final controller = GameController();
   await controller.initialize();
-  runApp(UnoPartyApp(controller: controller));
+  final music = MusicManager(controller);
+  await music.initialize();
+  runApp(UnoPartyApp(controller: controller, music: music));
 }
 
 class UnoPartyApp extends StatelessWidget {
-  const UnoPartyApp({super.key, required this.controller});
+  const UnoPartyApp({super.key, required this.controller, required this.music});
   final GameController controller;
+  final MusicManager music;
 
   @override
   Widget build(BuildContext context) {
@@ -46,10 +53,10 @@ class UnoPartyApp extends StatelessWidget {
         animation: controller,
         builder: (context, _) {
           final current = controller.state;
-          if (current == null) return HomeScreen(controller: controller);
+          if (current == null) return HomeScreen(controller: controller, music: music);
           final room = GameController.mapData(current['room']);
-          if (room['status'] == 'lobby') return LobbyScreen(controller: controller);
-          return GameScreen(controller: controller);
+          if (room['status'] == 'lobby') return LobbyScreen(controller: controller, music: music);
+          return GameScreen(controller: controller, music: music);
         },
       ),
     );
@@ -57,8 +64,9 @@ class UnoPartyApp extends StatelessWidget {
 }
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, required this.controller});
+  const HomeScreen({super.key, required this.controller, required this.music});
   final GameController controller;
+  final MusicManager music;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -188,7 +196,8 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const SizedBox(height: 18),
+                  Align(alignment: Alignment.centerRight, child: MusicToggleButton(music: widget.music)),
+                  const SizedBox(height: 2),
                   Center(
                     child: Container(
                       width: 112,
@@ -266,8 +275,9 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class LobbyScreen extends StatelessWidget {
-  const LobbyScreen({super.key, required this.controller});
+  const LobbyScreen({super.key, required this.controller, required this.music});
   final GameController controller;
+  final MusicManager music;
 
   @override
   Widget build(BuildContext context) {
@@ -281,7 +291,7 @@ class LobbyScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('ROOM LOBBY', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.2)),
         leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: controller.leaveRoom),
-        actions: [IconButton(tooltip: 'Keluar room', onPressed: controller.leaveRoom, icon: const Icon(Icons.exit_to_app_rounded))],
+        actions: [MusicToggleButton(music: music), IconButton(tooltip: 'Keluar room', onPressed: controller.leaveRoom, icon: const Icon(Icons.exit_to_app_rounded))],
       ),
       body: SafeArea(
         child: Center(
@@ -352,7 +362,7 @@ class LobbyScreen extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(color: const Color(0xFF33264A), borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFF8F6BC4).withOpacity(.5))),
-                    child: const Text('UNOLLELE: 6 tipe elemental, sistem weakness, dan 4 efek kartu Dragon. Setiap pemain akan mendapat 5 kartu.', style: TextStyle(color: Color(0xFFE2D5FF), height: 1.45, fontSize: 12)),
+                    child: const Text('UNOLLELE: 6 tipe elemental, sistem weakness, dan 4 efek kartu Dragon. Setiap pemain akan mendapat 7 kartu.', style: TextStyle(color: Color(0xFFE2D5FF), height: 1.45, fontSize: 12)),
                   ),
                 if (isHost)
                   FilledButton.icon(
@@ -374,8 +384,9 @@ class LobbyScreen extends StatelessWidget {
 }
 
 class GameScreen extends StatelessWidget {
-  const GameScreen({super.key, required this.controller});
+  const GameScreen({super.key, required this.controller, required this.music});
   final GameController controller;
+  final MusicManager music;
 
   Future<String?> _chooseColor(BuildContext context) async {
     return showModalBottomSheet<String>(
@@ -420,85 +431,40 @@ class GameScreen extends StatelessWidget {
     final isWinner = game['winnerId'] == controller.myId;
     final topCard = GameController.mapData(game['topCard']);
     final currentPlayer = players.where((player) => player['id'] == game['currentPlayerId']).firstOrNull;
+    final rematch = GameController.mapData(room['rematchVotes']);
+    final yesVotes = (rematch['yes'] as List? ?? []).map((item) => item.toString()).toList();
+    final noVotes = (rematch['no'] as List? ?? []).map((item) => item.toString()).toList();
+    final hasVoted = yesVotes.contains(controller.myId) || noVotes.contains(controller.myId);
+    final rematchResolved = rematch['resolved'] == true;
 
     return Scaffold(
       appBar: AppBar(
         title: Row(children: [Text(isUnollele ? 'UNOLLELE' : 'UNO PARTY', style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1)), const SizedBox(width: 10), Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4), decoration: BoxDecoration(color: panelColor, borderRadius: BorderRadius.circular(7)), child: Text(room['code']?.toString() ?? '', style: const TextStyle(fontSize: 11, letterSpacing: 1.5, color: accentColor, fontWeight: FontWeight.bold)))]),
-        actions: [IconButton(onPressed: () => controller.leaveRoom(), icon: const Icon(Icons.exit_to_app_rounded), tooltip: 'Keluar permainan')],
+        actions: [MusicToggleButton(music: music), IconButton(onPressed: controller.leaveRoom, icon: const Icon(Icons.exit_to_app_rounded), tooltip: 'Keluar permainan')],
       ),
       body: SafeArea(
         child: Column(children: [
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
               child: Column(children: [
-                Wrap(
-                  alignment: WrapAlignment.center,
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: players.where((player) => player['id'] != controller.myId).map((player) {
-                    final active = player['id'] == game['currentPlayerId'];
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
-                      decoration: BoxDecoration(color: active ? const Color(0xFF35412F) : panelColor, borderRadius: BorderRadius.circular(13), border: Border.all(color: active ? accentColor.withOpacity(.7) : Colors.white10)),
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        CircleAvatar(radius: 12, backgroundColor: _avatarColor(player['name']?.toString() ?? ''), child: Text((player['name']?.toString() ?? '?').characters.first.toUpperCase(), style: const TextStyle(fontSize: 10, color: Colors.black, fontWeight: FontWeight.w900))),
-                        const SizedBox(width: 7),
-                        Text(player['name']?.toString() ?? 'Player', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                        const SizedBox(width: 7),
-                        Text('${player['cardCount'] ?? 0} kartu', style: const TextStyle(fontSize: 10, color: Colors.white60)),
-                        if (player['connected'] != true) const Padding(padding: EdgeInsets.only(left: 4), child: Icon(Icons.wifi_off, size: 12, color: Colors.orangeAccent)),
-                      ]),
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.fromLTRB(16, 15, 16, 16),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(colors: [Color(0xFF202B39), Color(0xFF182330)], begin: Alignment.topLeft, end: Alignment.bottomRight),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: Colors.white10),
+                CircularGameTable(
+                  players: players,
+                  turnOrder: (game['turnOrder'] as List? ?? []).map((item) => item.toString()).toList(),
+                  myId: controller.myId,
+                  currentPlayerId: game['currentPlayerId']?.toString() ?? '',
+                  direction: (game['direction'] as num?)?.toInt() ?? 1,
+                  center: _buildTableCenter(
+                    game: game,
+                    topCard: topCard,
+                    currentPlayerName: currentPlayer?['name']?.toString() ?? 'PEMAIN',
+                    isFinished: room['status'] == 'finished',
+                    isWinner: isWinner,
+                    isUnollele: isUnollele,
+                    myTurn: myTurn,
                   ),
-                  child: Column(children: [
-                    Text(room['status'] == 'finished' ? (isWinner ? 'KAMU MENANG!' : 'PERMAINAN SELESAI') : (myTurn ? 'GILIRANMU' : 'GILIRAN ${currentPlayer?['name']?.toString().toUpperCase() ?? 'PEMAIN'}'), style: TextStyle(color: room['status'] == 'finished' ? accentColor : myTurn ? accentColor : Colors.white70, fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 1.6)),
-                    const SizedBox(height: 12),
-                    Row(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.center, children: [
-                      Column(children: [
-                        Container(width: 67, height: 100, decoration: BoxDecoration(color: const Color(0xFF30384A), borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.white24, width: 2)), child: const Center(child: Icon(Icons.style_rounded, size: 35, color: accentColor))),
-                        const SizedBox(height: 5),
-                        Text('DECK  ${game['deckCount'] ?? 0}', style: const TextStyle(fontSize: 9, color: Colors.white54, fontWeight: FontWeight.bold)),
-                      ]),
-                      const SizedBox(width: 28),
-                      Column(children: [
-                        Text('KARTU AKTIF', style: const TextStyle(fontSize: 9, color: Colors.white54, letterSpacing: 1.1, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 6),
-                        CardFace(card: topCard, width: 82, height: 120),
-                        const SizedBox(height: 8),
-                        if (isUnollele) ...[
-                          Text('TIPE: ${(topCard['element'] ?? '-').toString().toUpperCase()}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFFD6C1FF))),
-                          const SizedBox(height: 4),
-                          SizedBox(width: 150, child: Text(_unolleleRuleHint(topCard), textAlign: TextAlign.center, style: const TextStyle(fontSize: 9, color: Colors.white60, height: 1.25))),
-                        ] else
-                          Row(children: [const Text('Warna: ', style: TextStyle(color: Colors.white54, fontSize: 11)), Container(width: 13, height: 13, decoration: BoxDecoration(color: _colorFor(game['currentColor']?.toString()), shape: BoxShape.circle, border: Border.all(color: Colors.white38))), const SizedBox(width: 5), Text(game['currentColor']?.toString().toUpperCase() ?? '-', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold))]),
-                      ]),
-                      const SizedBox(width: 28),
-                      Column(children: [
-                        Container(width: 67, height: 100, decoration: BoxDecoration(color: panelColor, borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.white24, width: 2)), child: Center(child: Transform.rotate(angle: game['direction'] == -1 ? 3.14159 : 0, child: const Icon(Icons.sync_alt_rounded, size: 34, color: Colors.white70)))),
-                        const SizedBox(height: 5),
-                        Text(game['direction'] == -1 ? 'REVERSE' : 'ARAH', style: const TextStyle(fontSize: 9, color: Colors.white54, fontWeight: FontWeight.bold)),
-                      ]),
-                    ]),
-                    const SizedBox(height: 13),
-                    Text(game['lastMove']?.toString() ?? 'Permainan dimulai', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                    if (pendingUno != null) ...[
-                      const SizedBox(height: 10),
-                      Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7), decoration: BoxDecoration(color: const Color(0xFF513A1C), borderRadius: BorderRadius.circular(10)), child: Text(pendingUno == controller.myId ? 'JANGAN LUPA PANGGIL UNO!' : 'PEMAIN BELUM MEMANGGIL UNO', style: const TextStyle(fontSize: 10, color: accentColor, fontWeight: FontWeight.w900, letterSpacing: .7))),
-                    ],
-                  ]),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 12),
                 Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                   const Text('KARTUMU', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.2)),
                   Text('${hand.length} kartu', style: const TextStyle(color: Colors.white54, fontSize: 12)),
@@ -541,19 +507,35 @@ class GameScreen extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
             decoration: const BoxDecoration(color: Color(0xFF181D29), border: Border(top: BorderSide(color: Colors.white10))),
             child: Column(children: [
-              if (room['status'] == 'finished')
-                FilledButton.icon(onPressed: controller.leaveRoom, icon: const Icon(Icons.home_rounded), label: const Text('KEMBALI KE BERANDA'), style: FilledButton.styleFrom(backgroundColor: accentColor, foregroundColor: Colors.black, minimumSize: const Size.fromHeight(48)))
-              else ...[
-                if (isUnollele) ...[
+              if (room['status'] == 'finished') ...[
+                Text(isWinner ? 'KAMU MENANG!' : 'PERMAINAN SELESAI', style: const TextStyle(color: accentColor, fontSize: 15, fontWeight: FontWeight.w900, letterSpacing: 1.2)),
+                const SizedBox(height: 5),
+                Text('Voting main lagi: ${yesVotes.length} setuju • ${noVotes.length} tidak • ${rematch['eligible'] ?? players.length} pemain online', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60, fontSize: 11)),
+                if ((rematch['message']?.toString() ?? '').isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(rematch['message'].toString(), style: const TextStyle(color: Colors.orangeAccent, fontSize: 11)),
+                ],
+                const SizedBox(height: 10),
+                if (!rematchResolved && !hasVoted)
+                  Row(children: [
+                    Expanded(child: FilledButton.icon(onPressed: () => controller.voteRematch(playAgain: true), icon: const Icon(Icons.replay_rounded), label: const Text('MAIN LAGI'), style: FilledButton.styleFrom(backgroundColor: accentColor, foregroundColor: Colors.black, minimumSize: const Size.fromHeight(46)))),
+                    const SizedBox(width: 8),
+                    Expanded(child: OutlinedButton.icon(onPressed: () => controller.voteRematch(playAgain: false), icon: const Icon(Icons.close_rounded), label: const Text('TIDAK'), style: OutlinedButton.styleFrom(foregroundColor: Colors.white, minimumSize: const Size.fromHeight(46)))),
+                  ])
+                else if (!rematchResolved)
+                  const Padding(padding: EdgeInsets.all(8), child: Text('Suaramu tersimpan. Menunggu pemain lain memilih…', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 12)))
+                else
+                  const Padding(padding: EdgeInsets.all(8), child: Text('Voting selesai. Room tetap tersedia sampai pemain keluar.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 12))),
+                OutlinedButton.icon(onPressed: controller.leaveRoom, icon: const Icon(Icons.home_rounded), label: const Text('KELUAR KE BERANDA'), style: OutlinedButton.styleFrom(foregroundColor: Colors.white70, minimumSize: const Size.fromHeight(42))),
+              ] else ...[
+                if (isUnollele)
                   SizedBox(width: double.infinity, child: FilledButton.icon(
                     onPressed: myTurn && game['canDraw'] == true ? controller.drawCard : null,
                     icon: const Icon(Icons.add_card_rounded),
-                    label: const Text('AMBIL 1 KARTU  •  GILIRAN LANGSUNG DILEWATI'),
+                    label: const Text('AMBIL 1 KARTU  •  LEWATI GILIRAN'),
                     style: FilledButton.styleFrom(backgroundColor: const Color(0xFFB58BFF), foregroundColor: const Color(0xFF211D29), disabledBackgroundColor: Colors.white12, disabledForegroundColor: Colors.white30, minimumSize: const Size.fromHeight(48), textStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900)),
-                  )),
-                  if (myTurn && playableIds.isNotEmpty)
-                    const Padding(padding: EdgeInsets.only(top: 7), child: Text('Pilih salah satu kartu yang menyala; kamu masih memiliki kartu valid.', textAlign: TextAlign.center, style: TextStyle(fontSize: 10, color: Colors.white54))),
-                ] else
+                  ))
+                else
                   Row(children: [
                     Expanded(child: FilledButton.icon(
                       onPressed: myTurn && game['turnHasDrawn'] != true ? controller.drawCard : null,
@@ -567,6 +549,8 @@ class GameScreen extends StatelessWidget {
                       style: OutlinedButton.styleFrom(foregroundColor: Colors.white, disabledForegroundColor: Colors.white30, side: const BorderSide(color: Colors.white30), minimumSize: const Size.fromHeight(48), textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900)),
                     )),
                   ]),
+                if (isUnollele && myTurn)
+                  const Padding(padding: EdgeInsets.only(top: 6), child: Text('Kamu boleh mengambil kartu meski masih punya kartu yang bisa dimainkan.', textAlign: TextAlign.center, style: TextStyle(fontSize: 10, color: Colors.white54))),
                 if (pendingUno != null) ...[
                   const SizedBox(height: 8),
                   SizedBox(width: double.infinity, child: FilledButton(
@@ -580,6 +564,224 @@ class GameScreen extends StatelessWidget {
             ]),
           ),
         ]),
+      ),
+    );
+  }
+
+  Widget _buildTableCenter({
+    required Map<String, dynamic> game,
+    required Map<String, dynamic> topCard,
+    required String currentPlayerName,
+    required bool isFinished,
+    required bool isWinner,
+    required bool isUnollele,
+    required bool myTurn,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(colors: [Color(0xFF1C2D37), Color(0xFF17232E)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: Colors.white24, width: 1.2),
+        boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 14, offset: Offset(0, 5))],
+      ),
+      child: Column(mainAxisAlignment: MainAxisAlignment.center, mainAxisSize: MainAxisSize.min, children: [
+        Text(isFinished ? (isWinner ? 'KAMU MENANG' : 'SELESAI') : (myTurn ? 'GILIRANMU' : currentPlayerName.toUpperCase()), maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: TextStyle(color: isFinished || myTurn ? accentColor : Colors.white70, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: .8)),
+        const SizedBox(height: 6),
+        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Column(children: [
+            Container(width: 36, height: 54, decoration: BoxDecoration(color: const Color(0xFF30384A), borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.white24)), child: const Icon(Icons.style_rounded, color: accentColor, size: 25)),
+            const SizedBox(height: 3),
+            Text('PILE ${game['deckCount'] ?? 0}', style: const TextStyle(color: Colors.white60, fontSize: 8, fontWeight: FontWeight.bold)),
+          ]),
+          const SizedBox(width: 8),
+          Column(children: [
+            const Text('TOP CARD', style: TextStyle(color: Colors.white54, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: .8)),
+            const SizedBox(height: 3),
+            CardFace(card: topCard, width: 40, height: 58),
+          ]),
+          const SizedBox(width: 8),
+          Column(children: [
+            Transform.rotate(angle: (game['direction'] == -1) ? math.pi : 0, child: const Icon(Icons.sync_alt_rounded, color: Colors.white70, size: 25)),
+            const SizedBox(height: 4),
+            Text(game['direction'] == -1 ? 'REVERSE' : 'ARAH', style: const TextStyle(color: Colors.white54, fontSize: 8, fontWeight: FontWeight.bold)),
+          ]),
+        ]),
+        const SizedBox(height: 6),
+        TurnCountdown(deadline: (game['turnDeadline'] as num?)?.toInt(), active: !isFinished),
+        const SizedBox(height: 4),
+        Text(game['lastMove']?.toString() ?? 'Permainan dimulai', maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60, fontSize: 8, height: 1.2)),
+        if (isUnollele && topCard.isNotEmpty)
+          Text(_unolleleRuleHint(topCard), maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFFD6C1FF), fontSize: 7, height: 1.15)),
+        if (game['pendingUno'] != null)
+          const Text('UNO BELUM DIPANGGIL!', style: TextStyle(color: accentColor, fontSize: 8, fontWeight: FontWeight.w900)),
+      ]),
+    );
+  }
+}
+
+class CircularGameTable extends StatelessWidget {
+  const CircularGameTable({
+    super.key,
+    required this.players,
+    required this.turnOrder,
+    required this.myId,
+    required this.currentPlayerId,
+    required this.direction,
+    required this.center,
+  });
+
+  final List<Map<String, dynamic>> players;
+  final List<String> turnOrder;
+  final String myId;
+  final String currentPlayerId;
+  final int direction;
+  final Widget center;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 310,
+      width: double.infinity,
+      child: LayoutBuilder(builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        const height = 310.0;
+        final seatWidth = players.length >= 7 ? 76.0 : players.length >= 5 ? 84.0 : 94.0;
+        const seatHeight = 54.0;
+        final centerX = width / 2;
+        final centerY = height / 2;
+        final radiusX = width * .48;
+        final radiusY = height * .42;
+        final ids = turnOrder.isNotEmpty ? turnOrder : players.map((player) => player['id'].toString()).toList();
+        final myIndex = ids.indexOf(myId);
+        final count = ids.length;
+        final widgets = <Widget>[];
+
+        widgets.add(Positioned.fill(child: Padding(
+          padding: const EdgeInsets.fromLTRB(4, 10, 4, 7),
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF153D37),
+              borderRadius: BorderRadius.circular(170),
+              border: Border.all(color: const Color(0xFF4B8E75), width: 2),
+              boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 12, spreadRadius: 1)],
+            ),
+            child: Padding(padding: const EdgeInsets.all(9), child: Container(decoration: BoxDecoration(borderRadius: BorderRadius.circular(160), border: Border.all(color: Colors.white.withOpacity(.08), width: 1.2))),),
+          ),
+        )));
+
+        final centerWidth = math.min(width * .46, 190.0).toDouble();
+        widgets.add(Positioned(left: centerX - centerWidth / 2, top: centerY - 75, width: centerWidth, height: 150, child: center));
+
+        for (var i = 0; i < count; i++) {
+          final index = (myIndex < 0 ? i : (myIndex + (direction >= 0 ? i : -i) + count * 2) % count);
+          final id = ids[index];
+          final player = players.where((item) => item['id'] == id).firstOrNull;
+          if (player == null) continue;
+          final angle = math.pi / 2 + (direction >= 0 ? 1 : -1) * (2 * math.pi * i / count);
+          final left = (centerX + radiusX * math.cos(angle) - seatWidth / 2).clamp(0.0, width - seatWidth).toDouble();
+          final top = (centerY + radiusY * math.sin(angle) - seatHeight / 2).clamp(0.0, height - seatHeight).toDouble();
+          widgets.add(Positioned(
+            left: left,
+            top: top,
+            width: seatWidth,
+            height: seatHeight,
+            child: PlayerSeat(
+              player: player,
+              isMe: id == myId,
+              isCurrent: id == currentPlayerId,
+              compact: players.length >= 7,
+            ),
+          ));
+        }
+        return Stack(clipBehavior: Clip.none, children: widgets);
+      }),
+    );
+  }
+}
+
+class PlayerSeat extends StatelessWidget {
+  const PlayerSeat({super.key, required this.player, required this.isMe, required this.isCurrent, required this.compact});
+  final Map<String, dynamic> player;
+  final bool isMe;
+  final bool isCurrent;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = player['name']?.toString() ?? 'Player';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+      decoration: BoxDecoration(
+        color: isCurrent ? const Color(0xFF4A4529) : const Color(0xFF202A35),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: isCurrent ? accentColor : Colors.white24, width: isCurrent ? 2 : 1),
+        boxShadow: isCurrent ? [const BoxShadow(color: Color(0x66FFD447), blurRadius: 10)] : null,
+      ),
+      child: Row(children: [
+        CircleAvatar(radius: compact ? 10 : 12, backgroundColor: _avatarColor(name), child: Text(name.isEmpty ? '?' : name.characters.first.toUpperCase(), style: TextStyle(fontSize: compact ? 9 : 10, color: Colors.black, fontWeight: FontWeight.w900))),
+        const SizedBox(width: 4),
+        Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(isMe ? 'KAMU' : name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: compact ? 8 : 9, fontWeight: FontWeight.w900, color: isCurrent ? accentColor : Colors.white)),
+          Text('${player['cardCount'] ?? 0} kartu${player['connected'] == true ? '' : ' • offline'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 8, color: Colors.white60)),
+        ])),
+      ]),
+    );
+  }
+}
+
+class TurnCountdown extends StatefulWidget {
+  const TurnCountdown({super.key, required this.deadline, required this.active});
+  final int? deadline;
+  final bool active;
+
+  @override
+  State<TurnCountdown> createState() => _TurnCountdownState();
+}
+
+class _TurnCountdownState extends State<TurnCountdown> {
+  Timer? _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = Timer.periodic(const Duration(milliseconds: 250), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final remaining = widget.active && widget.deadline != null
+        ? ((widget.deadline! - DateTime.now().millisecondsSinceEpoch) / 1000).ceil().clamp(0, 15)
+        : 0;
+    final color = remaining <= 5 ? const Color(0xFFFF6B6B) : accentColor;
+    return Row(mainAxisAlignment: MainAxisAlignment.center, mainAxisSize: MainAxisSize.min, children: [
+      Icon(Icons.timer_outlined, size: 13, color: color),
+      const SizedBox(width: 3),
+      Text(widget.active ? '$remaining dtk' : '—', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: color)),
+    ]);
+  }
+}
+
+class MusicToggleButton extends StatelessWidget {
+  const MusicToggleButton({super.key, required this.music});
+  final MusicManager music;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: music,
+      builder: (context, _) => IconButton(
+        tooltip: music.muted ? 'Aktifkan musik' : 'Matikan musik',
+        onPressed: music.toggleMuted,
+        icon: Icon(music.muted ? Icons.volume_off_rounded : Icons.volume_up_rounded, color: music.muted ? Colors.white54 : accentColor),
       ),
     );
   }
@@ -700,7 +902,6 @@ IconData _elementIcon(String element) => switch (element) {
 String _unolleleRuleHint(Map<String, dynamic> topCard) {
   if (topCard['type'] == 'dragon') return 'Semua kartu angka dapat dimainkan; Dragon tidak dapat ditumpuk.';
   final element = topCard['element']?.toString() ?? '';
-  final number = topCard['number']?.toString() ?? '';
   const weakness = {
     'fire': 'Water / Ground',
     'water': 'Grass / Electric',
@@ -710,7 +911,7 @@ String _unolleleRuleHint(Map<String, dynamic> topCard) {
     'colorless': 'Semua elemen + Dragon',
   };
   final weakTypes = weakness[element] ?? '-';
-  return 'Angka $element / Colorless harus lebih tinggi dari $number; weakness: $weakTypes';
+  return 'Weakness: $weakTypes • Colorless & Dragon bisa melawan semua tipe';
 }
 
 class NoticeBanner extends StatelessWidget {
