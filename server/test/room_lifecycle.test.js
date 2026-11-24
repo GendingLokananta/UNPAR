@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { castRematchVote, getRematchVoteState } = require('../src/room_lifecycle');
+const { castRematchVote, getRematchVoteState, restartGameInRoom } = require('../src/room_lifecycle');
+const gameEngine = require('../src/game');
 
 function makeRoom(count = 4) {
   const players = Array.from({ length: count }, (_, index) => ({
@@ -85,4 +86,47 @@ test('rematch vote with fewer than two connected players does not record an inva
   assert.throws(() => castRematchVote(room, 'p1', 'yes', fakeCreateGame), /Minimal 2 pemain online/);
   assert.deepEqual(room.rematchVotes.yes, []);
   assert.deepEqual(room.rematchVotes.no, []);
+});
+
+test('main ulang langsung membuat game baru di room dan kode yang sama', () => {
+  const room = makeRoom(4);
+  room.players[3].connected = false;
+  room.hostId = 'p4';
+
+  const result = restartGameInRoom(room, 'p1', fakeCreateGame);
+
+  assert.equal(result.restarted, true);
+  assert.equal(result.roomCode, 'REMATCH');
+  assert.equal(room.code, 'REMATCH');
+  assert.equal(room.status, 'playing');
+  assert.equal(room.hostId, 'p1');
+  assert.equal(room.game.mode, 'unollele');
+  assert.deepEqual(room.game.players, ['p1', 'p2', 'p3']);
+  assert.equal(room.rematchVotes.yes.length, 0);
+  assert.equal(room.rematchVotes.no.length, 0);
+});
+
+test('main ulang memulai ulang engine UNOLLELE dengan kartu dan timer baru', () => {
+  const room = makeRoom(3);
+  room.game = { winnerId: 'p1', stale: true };
+
+  restartGameInRoom(room, 'p2', gameEngine.createGameForMode);
+
+  assert.equal(room.status, 'playing');
+  assert.equal(room.game.mode, 'unollele');
+  assert.equal(room.game.turnDeadline > Date.now(), true);
+  assert.equal(room.game.discard.length, 1);
+  assert.equal(room.game.hands.p1.length, 7);
+  assert.equal(room.game.hands.p2.length, 7);
+  assert.equal(room.game.hands.p3.length, 7);
+  assert.equal('stale' in room.game, false);
+});
+
+test('main ulang requires a finished room and at least two online players', () => {
+  const room = makeRoom(2);
+  room.status = 'playing';
+  assert.throws(() => restartGameInRoom(room, 'p1', fakeCreateGame), /setelah permainan selesai/);
+  room.status = 'finished';
+  room.players[1].connected = false;
+  assert.throws(() => restartGameInRoom(room, 'p1', fakeCreateGame), /Minimal 2 pemain online/);
 });

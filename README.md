@@ -10,10 +10,10 @@ UNO Party adalah game kartu multiplayer untuk Android. Aplikasi Flutter terhubun
 - 2 sampai 8 pemain per room; host dapat mulai setelah minimal 2 pemain terhubung.
 - Lobby menampilkan mode, kode room, pemain, status koneksi, dan host.
 - Socket.IO realtime, reconnect dan rejoin room.
-- Server menjadi sumber kebenaran untuk validasi kartu, giliran, efek, timer, voting rematch, dan pemenang.
+- Server menjadi sumber kebenaran untuk validasi kartu, giliran, efek, timer, main ulang, dan pemenang.
 - Setiap HP hanya menerima isi kartu miliknya; isi kartu lawan tetap tersembunyi.
 - Timer 15 detik per giliran untuk kedua mode; jika habis, pemain otomatis mengambil 2 kartu dan gilirannya dilewati.
-- Setelah permainan selesai, pemain melakukan voting rematch. Jika suara setuju mencapai mayoritas pemain online, pertandingan baru dimulai di room dan kode yang sama.
+- Setelah permainan selesai, pemain yang masih online dapat menekan **Main Ulang** untuk membuat pertandingan baru di room dan kode yang sama; minimal dua pemain harus online.
 - Musik latar lobby, musik pertandingan, dan musik lebih intens ketika ada pemain aktif dengan 1–2 kartu tersisa; musik dapat dimatikan dari tombol volume.
 
 ### UNO Classic
@@ -23,13 +23,13 @@ UNO Party adalah game kartu multiplayer untuk Android. Aplikasi Flutter terhubun
 - Draw Two / Wild Draw Four tidak dapat ditumpuk.
 
 ### UNOLLELE
-- Deck 126 kartu: 100 kartu Fire/Water/Grass/Electric/Ground (masing-masing angka 1–10, dua copy), 10 kartu Colorless (angka 1–10, satu copy), dan 16 kartu Dragon.
+- Deck 132 kartu: 100 kartu Fire/Water/Grass/Electric/Ground (masing-masing angka 1–10, dua copy), 10 kartu Colorless (angka 1–10, satu copy), dan 22 kartu Dragon.
 - Setiap pemain menerima 7 kartu awal.
-- Lima elemen dasar mengikuti aturan weakness; Colorless merupakan kartu universal yang dapat melawan semua tipe angka. Pada Colorless yang menjadi top pile, kartu Colorless berikutnya harus memiliki angka lebih tinggi.
-- Semua kartu angka memiliki weakness terhadap Dragon: Dragon dapat dimainkan di atas semua kartu angka. Dragon tidak dapat ditumpuk di atas Dragon.
-- Di atas Dragon, semua kartu angka dari enam elemen dapat dimainkan.
-- Empat efek Dragon, masing-masing empat copy: Skip, Switch Direction, +2, Reset.
-- Pemain boleh memilih mengambil 1 kartu walaupun masih memiliki kartu yang bisa dimainkan; setelah draw, giliran langsung dilewati.
+- Lima elemen dasar mengikuti aturan weakness. Colorless dapat dimainkan di atas semua tipe, termasuk Dragon; jika top pile sudah Colorless, Colorless berikutnya harus bernomor lebih tinggi.
+- Dragon dapat dimainkan di atas semua tipe selain Colorless, termasuk Dragon lain. Dragon tidak dapat dimainkan jika top pile adalah Colorless.
+- Di atas Dragon, kartu angka dari enam elemen dapat dimainkan.
+- Enam efek Dragon: Skip (4 copy), Switch Direction (4), +2 (4), Reset (4), Switch (2), dan +1 All (4). Dragon Switch menukar seluruh kartu tangan pengguna dengan pemain online yang dipilih. Dragon +1 All membuat semua pemain, termasuk pengguna kartu, mengambil satu kartu.
+- Pemain boleh mengambil satu kartu meski memiliki kartu valid; setelah mengambil, giliran langsung dilewati.
 - Kartu elemental dan Dragon memiliki desain visual khusus.
 - Meja bermain menempatkan pemain melingkar sesuai urutan dan arah permainan, dengan penanda giliran dan countdown.
 
@@ -78,7 +78,7 @@ npm install
 npm test
 ```
 
-Tes backend pada build ini mencakup UNO Classic, deck/aturan UNOLLELE, timeout, dan voting rematch; jalankan `npm test` untuk hasil terkini. Pengujian mencakup transisi giliran dan state untuk beberapa pemain; pengujian Socket.IO live serta APK tetap perlu dijalankan pada lingkungan perangkat/build Flutter.
+Tes backend pada build ini mencakup UNO Classic, deck/aturan UNOLLELE, efek Dragon baru, timeout, dan main ulang dalam room yang sama; jalankan `npm test` untuk hasil terkini. Pengujian mencakup transisi giliran dan state untuk beberapa pemain; pengujian Socket.IO live serta APK tetap perlu dijalankan pada lingkungan perangkat/build Flutter.
 
 ## Batasan yang masih ada
 

@@ -45,4 +45,24 @@ function castRematchVote(room, playerId, choice, createGameForMode) {
   return { restarted: false };
 }
 
-module.exports = { getRematchVoteState, castRematchVote };
+function restartGameInRoom(room, playerId, createGameForMode) {
+  if (room.status !== 'finished') throw new Error('Main ulang hanya tersedia setelah permainan selesai.');
+  const connectedPlayers = room.players.filter((player) => player.connected);
+  if (!connectedPlayers.some((player) => player.id === playerId)) {
+    throw new Error('Hanya pemain yang masih online di room ini yang bisa memulai ulang.');
+  }
+  if (connectedPlayers.length < 2) {
+    throw new Error('Minimal 2 pemain online untuk memulai permainan baru.');
+  }
+
+  room.players = connectedPlayers;
+  if (!connectedPlayers.some((player) => player.id === room.hostId)) {
+    room.hostId = connectedPlayers[0].id;
+  }
+  room.game = createGameForMode(room.players, room.gameMode);
+  room.status = 'playing';
+  room.rematchVotes = { yes: [], no: [], resolved: false, message: '' };
+  return { restarted: true, roomCode: room.code };
+}
+
+module.exports = { getRematchVoteState, castRematchVote, restartGameInRoom };

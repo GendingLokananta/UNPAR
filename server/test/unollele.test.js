@@ -20,7 +20,7 @@ function dragon(id, effect) {
 
 function roomWith({
   playerList = players(),
-  top = number('top', 'colorless', 10),
+  top = number('top', 'fire', 5),
   hand = [],
   otherHands = {},
   deck = [],
@@ -48,11 +48,11 @@ function roomWith({
   return { code: 'TEST01', gameMode: 'unollele', status: 'playing', hostId: playerList[0].id, players: playerList, game };
 }
 
-test('UNOLLELE deck contains 126 cards: 100 elemental numbers, 10 Colorless and 16 Dragon', () => {
+test('UNOLLELE deck contains 132 cards: 100 elemental numbers, 10 Colorless and 22 Dragon', () => {
   const deck = engine.createUnolleleDeck();
-  assert.equal(deck.length, 126);
+  assert.equal(deck.length, 132);
   assert.equal(deck.filter((card) => card.type === 'number').length, 110);
-  assert.equal(deck.filter((card) => card.type === 'dragon').length, 16);
+  assert.equal(deck.filter((card) => card.type === 'dragon').length, 22);
   for (const element of ['fire', 'water', 'grass', 'electric', 'ground']) {
     for (let value = 1; value <= 10; value += 1) {
       assert.equal(deck.filter((card) => card.element === element && card.number === value).length, 2);
@@ -62,8 +62,10 @@ test('UNOLLELE deck contains 126 cards: 100 elemental numbers, 10 Colorless and 
     assert.equal(deck.filter((card) => card.element === 'colorless' && card.number === value).length, 1);
   }
   for (const effect of engine.DRAGON_EFFECTS) {
-    assert.equal(deck.filter((card) => card.type === 'dragon' && card.effect === effect).length, 4);
+    assert.equal(deck.filter((card) => card.type === 'dragon' && card.effect === effect).length, engine.DRAGON_EFFECT_COPIES[effect]);
   }
+  assert.equal(deck.filter((card) => card.type === 'dragon' && card.effect === 'switch_hand').length, 2);
+  assert.equal(deck.filter((card) => card.type === 'dragon' && card.effect === 'draw_one_all').length, 4);
 });
 
 test('UNOLLELE deals seven cards per player and starts with a numbered card', () => {
@@ -74,7 +76,7 @@ test('UNOLLELE deals seven cards per player and starts with a numbered card', ()
   for (const hand of Object.values(game.hands)) assert.equal(hand.length, 7);
   assert.equal(game.discard.length, 1);
   assert.equal(game.discard[0].type, 'number');
-  assert.equal(game.deck.length + game.discard.length + 56, 126);
+  assert.equal(game.deck.length + game.discard.length + 56, 132);
 });
 
 test('UNOLLELE mode is selected by createGameForMode while Classic still deals seven cards', () => {
@@ -90,12 +92,14 @@ test('same element accepts only a strictly higher number', () => {
   assert.equal(engine.canPlayUnolleleCard(game, number('lower', 'fire', 4)), false);
 });
 
-test('every numbered element is weak to Dragon, and Dragon is weak to every numbered element', () => {
-  for (const element of engine.UNOLLELE_ELEMENTS) {
+test('Dragon can counter every elemental type except Colorless, and Colorless can counter Dragon', () => {
+  for (const element of ['fire', 'water', 'grass', 'electric', 'ground']) {
     assert.ok(engine.UNOLLELE_WEAKNESS[element].includes('dragon'));
     assert.ok(engine.UNOLLELE_WEAKNESS.dragon.includes(element));
   }
-  assert.equal(engine.UNOLLELE_WEAKNESS.dragon.includes('dragon'), false);
+  assert.equal(engine.UNOLLELE_WEAKNESS.colorless.includes('dragon'), false);
+  assert.ok(engine.UNOLLELE_WEAKNESS.dragon.includes('colorless'));
+  assert.ok(engine.UNOLLELE_WEAKNESS.dragon.includes('dragon'));
 });
 
 test('weakness relations follow every defined element matchup and universal Colorless/Dragon', () => {
@@ -127,29 +131,30 @@ test('Colorless counters all elemental types regardless of number, but same Colo
   assert.equal(engine.canPlayUnolleleCard({ discard: [number('top-c-5', 'colorless', 5)] }, number('colorless-5', 'colorless', 5)), false);
 });
 
-test('Colorless accepts all five elemental types and Dragon regardless of number', () => {
+test('Colorless accepts every elemental number over Colorless, but Dragon cannot be played on Colorless', () => {
   const game = { discard: [number('top', 'colorless', 10)] };
   for (const element of ['fire', 'water', 'grass', 'electric', 'ground']) {
     assert.equal(engine.canPlayUnolleleCard(game, number(`c-${element}`, element, 1)), true);
   }
-  assert.equal(engine.canPlayUnolleleCard(game, dragon('d', 'skip')), true);
+  assert.equal(engine.canPlayUnolleleCard(game, dragon('d', 'skip')), false);
   assert.equal(engine.canPlayUnolleleCard(game, number('colorless-low', 'colorless', 1)), false);
   assert.equal(engine.canPlayUnolleleCard(game, number('colorless-high', 'colorless', 10)), false);
 });
 
-test('Dragon can be played on every numbered type, and never on another Dragon', () => {
-  for (const element of engine.UNOLLELE_ELEMENTS) {
+test('Dragon can be played over every type except Colorless, including another Dragon', () => {
+  for (const element of ['fire', 'water', 'grass', 'electric', 'ground']) {
     assert.equal(engine.canPlayUnolleleCard({ discard: [number(`top-${element}`, element, 2)] }, dragon(`dragon-${element}`, 'skip')), true);
   }
-  assert.equal(engine.canPlayUnolleleCard({ discard: [dragon('d3', 'draw_two')] }, dragon('d4', 'reset')), false);
+  assert.equal(engine.canPlayUnolleleCard({ discard: [number('top-colorless', 'colorless', 2)] }, dragon('dragon-colorless', 'skip')), false);
+  assert.equal(engine.canPlayUnolleleCard({ discard: [dragon('d3', 'draw_two')] }, dragon('d4', 'reset')), true);
 });
 
-test('every numbered element can be played on Dragon, but another Dragon cannot', () => {
+test('every numbered element and Colorless can be played on Dragon, and Dragon can also be stacked', () => {
   const game = { discard: [dragon('top-dragon', 'skip')] };
   for (const element of engine.UNOLLELE_ELEMENTS) {
     assert.equal(engine.canPlayUnolleleCard(game, number(`n-${element}`, element, 1)), true);
   }
-  assert.equal(engine.canPlayUnolleleCard(game, dragon('other-dragon', 'reset')), false);
+  assert.equal(engine.canPlayUnolleleCard(game, dragon('other-dragon', 'reset')), true);
 });
 
 test('Dragon Skip keeps the turn with the player who played it', () => {
@@ -222,6 +227,74 @@ test('Dragon Reset played as the last card is not a win and still deals four car
   assert.equal(room.game.winnerId, null);
   assert.equal(room.game.hands.p1.length, 4);
   assert.equal(room.game.currentPlayerId, 'p2');
+});
+
+test('Dragon Switch exchanges the remaining full hands with the selected online player', () => {
+  const targetHand = [number('target-1', 'water', 1), number('target-2', 'grass', 2), number('target-3', 'fire', 3)];
+  const playerHandAfterCard = [number('actor-1', 'electric', 4), number('actor-2', 'ground', 5)];
+  const room = roomWith({
+    hand: [dragon('switch-hand', 'switch_hand'), ...playerHandAfterCard],
+    otherHands: { p2: targetHand },
+  });
+
+  engine.playCard(room, 'p1', 'switch-hand', undefined, 'p2');
+
+  assert.deepEqual(room.game.hands.p1.map((card) => card.id), targetHand.map((card) => card.id));
+  assert.deepEqual(room.game.hands.p2.map((card) => card.id), playerHandAfterCard.map((card) => card.id));
+  assert.equal(room.game.currentPlayerId, 'p2');
+  assert.match(room.game.lastMove, /Dragon Switch.*Player 2/);
+  assert.equal(room.game.discard.at(-1).id, 'switch-hand');
+});
+
+test('Dragon Switch as the final card ends the game instead of leaving a player with zero cards', () => {
+  const room = roomWith({
+    hand: [dragon('last-switch', 'switch_hand')],
+    otherHands: { p2: [number('p2-a', 'water', 1), number('p2-b', 'grass', 2)] },
+  });
+
+  engine.playCard(room, 'p1', 'last-switch', undefined, 'p2');
+
+  assert.equal(room.status, 'finished');
+  assert.equal(room.game.winnerId, 'p2');
+  assert.equal(room.game.hands.p2.length, 0);
+  assert.equal(room.game.hands.p1.length, 2);
+});
+
+test('Dragon Switch rejects a missing, self, or offline target without consuming the card', () => {
+  const room = roomWith({ hand: [dragon('switch-hand', 'switch_hand')] });
+  assert.throws(() => engine.playCard(room, 'p1', 'switch-hand'), /Pilih pemain lain/);
+  assert.throws(() => engine.playCard(room, 'p1', 'switch-hand', undefined, 'p1'), /Pilih pemain lain/);
+  room.players[1].connected = false;
+  assert.throws(() => engine.playCard(room, 'p1', 'switch-hand', undefined, 'p2'), /Pilih pemain lain/);
+  assert.equal(room.game.hands.p1.length, 1);
+  assert.equal(room.game.discard.length, 1);
+});
+
+test('Dragon +1 All gives one card to every player including the player who used it', () => {
+  const room = roomWith({
+    playerList: players(3),
+    hand: [dragon('plus-one-all', 'draw_one_all'), number('held', 'fire', 1)],
+    otherHands: {
+      p2: [number('p2-held', 'water', 2)],
+      p3: [number('p3-held', 'grass', 3), number('p3-held-2', 'ground', 4)],
+    },
+    deck: [
+      number('draw-p1', 'electric', 5),
+      number('draw-p2', 'water', 6),
+      number('draw-p3', 'grass', 7),
+    ],
+  });
+  const before = Object.fromEntries(Object.entries(room.game.hands).map(([id, hand]) => [id, hand.length]));
+
+  engine.playCard(room, 'p1', 'plus-one-all');
+
+  for (const player of room.players) {
+    const expected = before[player.id] + (player.id === 'p1' ? 0 : 1);
+    assert.equal(room.game.hands[player.id].length, expected);
+  }
+  assert.equal(room.game.deck.length, 0);
+  assert.equal(room.game.currentPlayerId, 'p2');
+  assert.match(room.game.lastMove, /Dragon \+1 All/);
 });
 
 test('UNOLLELE draw is allowed even with a valid card and immediately skips the turn', () => {

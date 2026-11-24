@@ -362,7 +362,7 @@ class LobbyScreen extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(color: const Color(0xFF33264A), borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFF8F6BC4).withOpacity(.5))),
-                    child: const Text('UNOLLELE: 6 tipe elemental, sistem weakness, dan 4 efek kartu Dragon. Setiap pemain akan mendapat 7 kartu.', style: TextStyle(color: Color(0xFFE2D5FF), height: 1.45, fontSize: 12)),
+                    child: const Text('UNOLLELE: 6 tipe elemental, sistem weakness, dan 6 efek kartu Dragon. Setiap pemain mendapat 7 kartu.', style: TextStyle(color: Color(0xFFE2D5FF), height: 1.45, fontSize: 12)),
                   ),
                 if (isHost)
                   FilledButton.icon(
@@ -418,6 +418,57 @@ class GameScreen extends StatelessWidget {
     )));
   }
 
+  Future<String?> _chooseSwitchTarget(
+    BuildContext context,
+    List<Map<String, dynamic>> players,
+    String myId,
+  ) async {
+    final eligible = players
+        .where((player) => player['id'] != myId && player['connected'] == true)
+        .toList();
+    if (eligible.isEmpty) {
+      controller.setNotice('Tidak ada pemain lain yang sedang online untuk ditukar kartunya.', error: true);
+      return null;
+    }
+
+    return showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: panelColor,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Text('DRAGON SWITCH', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.3, color: Color(0xFFD7B8FF))),
+            const SizedBox(height: 5),
+            const Text('Pilih pemain yang akan bertukar seluruh kartu tangan denganmu.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 12)),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: (MediaQuery.of(sheetContext).size.height * .55).clamp(120.0, 420.0).toDouble(),
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: eligible.length,
+                separatorBuilder: (_, __) => const Divider(color: Colors.white10, height: 1),
+                itemBuilder: (context, index) {
+                  final player = eligible[index];
+                  final id = player['id'].toString();
+                  final name = player['name']?.toString() ?? 'Pemain';
+                  return ListTile(
+                    leading: CircleAvatar(backgroundColor: const Color(0xFF7043A5), child: Text(name.isEmpty ? '?' : name.characters.first.toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900))),
+                    title: Text(name, style: const TextStyle(fontWeight: FontWeight.w800)),
+                    subtitle: Text('${player['cardCount'] ?? 0} kartu di tangan', style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                    trailing: const Icon(Icons.swap_horiz_rounded, color: Color(0xFFD7B8FF)),
+                    onTap: () => Navigator.pop(sheetContext, id),
+                  );
+                },
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final room = controller.room;
@@ -431,11 +482,7 @@ class GameScreen extends StatelessWidget {
     final isWinner = game['winnerId'] == controller.myId;
     final topCard = GameController.mapData(game['topCard']);
     final currentPlayer = players.where((player) => player['id'] == game['currentPlayerId']).firstOrNull;
-    final rematch = GameController.mapData(room['rematchVotes']);
-    final yesVotes = (rematch['yes'] as List? ?? []).map((item) => item.toString()).toList();
-    final noVotes = (rematch['no'] as List? ?? []).map((item) => item.toString()).toList();
-    final hasVoted = yesVotes.contains(controller.myId) || noVotes.contains(controller.myId);
-    final rematchResolved = rematch['resolved'] == true;
+    final onlinePlayerCount = players.where((player) => player['connected'] == true).length;
 
     return Scaffold(
       appBar: AppBar(
@@ -491,7 +538,12 @@ class GameScreen extends StatelessWidget {
                                     chosenColor = await _chooseColor(context);
                                     if (chosenColor == null) return;
                                   }
-                                  controller.playCard(id, chosenColor: chosenColor);
+                                  String? targetPlayerId;
+                                  if (isUnollele && card['type'] == 'dragon' && card['effect'] == 'switch_hand') {
+                                    targetPlayerId = await _chooseSwitchTarget(context, players, controller.myId);
+                                    if (targetPlayerId == null) return;
+                                  }
+                                  controller.playCard(id, chosenColor: chosenColor, targetPlayerId: targetPlayerId);
                                 } : null,
                                 borderRadius: BorderRadius.circular(12),
                                 child: CardFace(card: card, width: 72, height: 112, glow: canPlay),
@@ -510,22 +562,19 @@ class GameScreen extends StatelessWidget {
               if (room['status'] == 'finished') ...[
                 Text(isWinner ? 'KAMU MENANG!' : 'PERMAINAN SELESAI', style: const TextStyle(color: accentColor, fontSize: 15, fontWeight: FontWeight.w900, letterSpacing: 1.2)),
                 const SizedBox(height: 5),
-                Text('Voting main lagi: ${yesVotes.length} setuju • ${noVotes.length} tidak • ${rematch['eligible'] ?? players.length} pemain online', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60, fontSize: 11)),
-                if ((rematch['message']?.toString() ?? '').isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Text(rematch['message'].toString(), style: const TextStyle(color: Colors.orangeAccent, fontSize: 11)),
-                ],
+                const Text('Mulai pertandingan baru di room yang sama tanpa memasukkan kode lagi.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 11)),
                 const SizedBox(height: 10),
-                if (!rematchResolved && !hasVoted)
-                  Row(children: [
-                    Expanded(child: FilledButton.icon(onPressed: () => controller.voteRematch(playAgain: true), icon: const Icon(Icons.replay_rounded), label: const Text('MAIN LAGI'), style: FilledButton.styleFrom(backgroundColor: accentColor, foregroundColor: Colors.black, minimumSize: const Size.fromHeight(46)))),
-                    const SizedBox(width: 8),
-                    Expanded(child: OutlinedButton.icon(onPressed: () => controller.voteRematch(playAgain: false), icon: const Icon(Icons.close_rounded), label: const Text('TIDAK'), style: OutlinedButton.styleFrom(foregroundColor: Colors.white, minimumSize: const Size.fromHeight(46)))),
-                  ])
-                else if (!rematchResolved)
-                  const Padding(padding: EdgeInsets.all(8), child: Text('Suaramu tersimpan. Menunggu pemain lain memilih…', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 12)))
-                else
-                  const Padding(padding: EdgeInsets.all(8), child: Text('Voting selesai. Room tetap tersedia sampai pemain keluar.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 12))),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: controller.connected && onlinePlayerCount >= 2 ? controller.restartGame : null,
+                    icon: const Icon(Icons.replay_rounded),
+                    label: const Text('MAIN ULANG'),
+                    style: FilledButton.styleFrom(backgroundColor: accentColor, foregroundColor: Colors.black, disabledBackgroundColor: Colors.white12, disabledForegroundColor: Colors.white30, minimumSize: const Size.fromHeight(46)),
+                  ),
+                ),
+                if (onlinePlayerCount < 2)
+                  const Padding(padding: EdgeInsets.only(top: 7), child: Text('Minimal 2 pemain harus online untuk memulai ulang.', textAlign: TextAlign.center, style: TextStyle(color: Colors.orangeAccent, fontSize: 11))),
                 OutlinedButton.icon(onPressed: controller.leaveRoom, icon: const Icon(Icons.home_rounded), label: const Text('KELUAR KE BERANDA'), style: OutlinedButton.styleFrom(foregroundColor: Colors.white70, minimumSize: const Size.fromHeight(42))),
               ] else ...[
                 if (isUnollele)
@@ -813,6 +862,8 @@ class CardFace extends StatelessWidget {
       'switch_direction' => 'REVERSE',
       'draw_two' => '+2',
       'reset' => 'RESET',
+      'switch_hand' => 'SWITCH',
+      'draw_one_all' => '+1 ALL',
       _ => 'DRAGON',
     };
     final icon = isDragon ? Icons.auto_awesome_rounded : _elementIcon(element);
@@ -900,7 +951,7 @@ IconData _elementIcon(String element) => switch (element) {
 };
 
 String _unolleleRuleHint(Map<String, dynamic> topCard) {
-  if (topCard['type'] == 'dragon') return 'Semua kartu angka dapat dimainkan; Dragon tidak dapat ditumpuk.';
+  if (topCard['type'] == 'dragon') return 'Semua tipe dapat dimainkan; Dragon juga bisa ditumpuk.';
   final element = topCard['element']?.toString() ?? '';
   const weakness = {
     'fire': 'Water / Ground',
@@ -908,10 +959,10 @@ String _unolleleRuleHint(Map<String, dynamic> topCard) {
     'grass': 'Fire',
     'electric': 'Ground',
     'ground': 'Water / Grass',
-    'colorless': 'Semua elemen + Dragon',
+    'colorless': 'Semua elemen; Dragon tidak bisa di atas Colorless',
   };
   final weakTypes = weakness[element] ?? '-';
-  return 'Weakness: $weakTypes • Colorless & Dragon bisa melawan semua tipe';
+  return 'Weakness: $weakTypes • Colorless universal; Dragon tidak bisa di atas Colorless';
 }
 
 class NoticeBanner extends StatelessWidget {

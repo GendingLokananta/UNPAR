@@ -231,9 +231,11 @@ class GameController extends ChangeNotifier {
   void callUno() => _send('call_uno');
   void catchUno() => _send('catch_uno');
   void voteRematch({required bool playAgain}) => _send('vote_rematch', {'choice': playAgain ? 'yes' : 'no'});
-  void playCard(String cardId, {String? chosenColor}) => _send('play_card', {
+  void restartGame() => _send('restart_game');
+  void playCard(String cardId, {String? chosenColor, String? targetPlayerId}) => _send('play_card', {
         'cardId': cardId,
         if (chosenColor != null) 'chosenColor': chosenColor,
+        if (targetPlayerId != null) 'targetPlayerId': targetPlayerId,
       });
 
   Future<void> leaveRoom() async {

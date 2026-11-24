@@ -104,7 +104,7 @@ function bindAction(socket, event, handler) {
       const room = findRoomForPlayer(playerId);
       if (!room) throw new Error('Room tidak ditemukan.');
       handler(room, playerId, payload || {});
-      if (['play_card', 'draw_card', 'pass_turn'].includes(event)) {
+      if (['play_card', 'draw_card', 'pass_turn', 'restart_game'].includes(event)) {
         scheduleTurnTimer(room, { reset: room.status === 'playing' });
       }
       emitRoom(room);
@@ -223,12 +223,15 @@ io.on('connection', (socket) => {
   });
 
   bindAction(socket, 'play_card', (room, playerId, payload) => {
-    gameEngine.playCard(room, playerId, String(payload.cardId || ''), payload.chosenColor);
+    gameEngine.playCard(room, playerId, String(payload.cardId || ''), payload.chosenColor, payload.targetPlayerId);
   });
   bindAction(socket, 'draw_card', (room, playerId) => gameEngine.drawOne(room, playerId));
   bindAction(socket, 'pass_turn', (room, playerId) => gameEngine.passTurn(room, playerId));
   bindAction(socket, 'call_uno', (room, playerId) => gameEngine.callUno(room, playerId));
   bindAction(socket, 'catch_uno', (room, playerId) => gameEngine.catchUno(room, playerId));
+  bindAction(socket, 'restart_game', (room, playerId) => {
+    roomLifecycle.restartGameInRoom(room, playerId, gameEngine.createGameForMode);
+  });
 
   socket.on('vote_rematch', (payload = {}, ack) => {
     try {
