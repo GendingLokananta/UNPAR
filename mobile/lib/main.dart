@@ -362,7 +362,7 @@ class LobbyScreen extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(color: const Color(0xFF33264A), borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFF8F6BC4).withOpacity(.5))),
-                    child: const Text('UNOLLELE: 6 tipe elemental, sistem weakness, dan 6 efek kartu Dragon. Setiap pemain mendapat 7 kartu.', style: TextStyle(color: Color(0xFFE2D5FF), height: 1.45, fontSize: 12)),
+                    child: const Text('UNOLLELE: elemental & weakness, 10 kartu Colorless 10, 10 efek Dragon, serta sistem spectator hingga pemain terakhir kalah.', style: TextStyle(color: Color(0xFFE2D5FF), height: 1.45, fontSize: 12)),
                   ),
                 if (isHost)
                   FilledButton.icon(
@@ -424,7 +424,10 @@ class GameScreen extends StatelessWidget {
     String myId,
   ) async {
     final eligible = players
-        .where((player) => player['id'] != myId && player['connected'] == true)
+        .where((player) =>
+            player['id'] != myId &&
+            player['connected'] == true &&
+            player['isSpectator'] != true)
         .toList();
     if (eligible.isEmpty) {
       controller.setNotice('Tidak ada pemain lain yang sedang online untuk ditukar kartunya.', error: true);
@@ -469,6 +472,143 @@ class GameScreen extends StatelessWidget {
     );
   }
 
+  Future<String?> _chooseBlockedElement(BuildContext context) {
+    const elements = [
+      ('fire', 'FIRE', Icons.local_fire_department_rounded),
+      ('water', 'WATER', Icons.water_drop_rounded),
+      ('grass', 'GRASS', Icons.eco_rounded),
+      ('electric', 'ELECTRIC', Icons.bolt_rounded),
+      ('ground', 'GROUND', Icons.terrain_rounded),
+      ('colorless', 'COLORLESS', Icons.circle_outlined),
+      ('dragon', 'DRAGON', Icons.auto_awesome_rounded),
+    ];
+    return showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: panelColor,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 18, 16, 14),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Text('DRAGON BLOCK', style: TextStyle(fontWeight: FontWeight.w900, color: Color(0xFFD7B8FF), letterSpacing: 1.2)),
+            const SizedBox(height: 5),
+            const Text('Pilih elemen yang tidak boleh dimainkan sampai giliranmu kembali.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 12)),
+            const SizedBox(height: 10),
+            ...elements.map((item) => ListTile(
+              dense: true,
+              leading: Icon(item.$3, color: _elementColor(item.$1)),
+              title: Text(item.$2, style: const TextStyle(fontWeight: FontWeight.w800)),
+              trailing: const Icon(Icons.block_rounded, color: Color(0xFFD7B8FF)),
+              onTap: () => Navigator.pop(sheetContext, item.$1),
+            )),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Future<String?> _chooseDiscardHandCard(
+    BuildContext context,
+    List<Map<String, dynamic>> cards,
+  ) {
+    return showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: panelColor,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 18, 16, 14),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Text('DRAGON DISCARD', style: TextStyle(fontWeight: FontWeight.w900, color: Color(0xFFD7B8FF), letterSpacing: 1.2)),
+            const SizedBox(height: 5),
+            const Text('Pilih hingga satu kartu untuk dibuang tanpa mengaktifkan efeknya.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 12)),
+            const SizedBox(height: 10),
+            SizedBox(
+              height: (MediaQuery.of(sheetContext).size.height * .45).clamp(120.0, 340.0).toDouble(),
+              child: ListView.separated(
+                itemCount: cards.length,
+                separatorBuilder: (_, __) => const Divider(color: Colors.white10, height: 1),
+                itemBuilder: (context, index) {
+                  final card = cards[index];
+                  final id = card['id']?.toString() ?? '';
+                  return ListTile(
+                    leading: CardFace(card: card, width: 34, height: 52),
+                    title: Text(_cardDescription(card), style: const TextStyle(fontWeight: FontWeight.w800)),
+                    trailing: const Icon(Icons.delete_outline_rounded, color: Color(0xFFD7B8FF)),
+                    onTap: () => Navigator.pop(sheetContext, id),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 6),
+            OutlinedButton(
+              onPressed: () => Navigator.pop(sheetContext, '__none__'),
+              child: const Text('TIDAK MEMBUANG KARTU'),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Future<String?> _chooseReviveCard(
+    BuildContext context,
+    List<Map<String, dynamic>> cards,
+  ) {
+    return showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: panelColor,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 18, 16, 14),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Text('DRAGON REVIVE', style: TextStyle(fontWeight: FontWeight.w900, color: Color(0xFFD7B8FF), letterSpacing: 1.2)),
+            const SizedBox(height: 5),
+            const Text('Lihat discard pile dan pilih satu kartu untuk diambil ke tangan.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 12)),
+            const SizedBox(height: 10),
+            SizedBox(
+              height: (MediaQuery.of(sheetContext).size.height * .58).clamp(150.0, 440.0).toDouble(),
+              child: ListView.separated(
+                itemCount: cards.length,
+                separatorBuilder: (_, __) => const Divider(color: Colors.white10, height: 1),
+                itemBuilder: (context, index) {
+                  final card = cards[index];
+                  final id = card['id']?.toString() ?? '';
+                  return ListTile(
+                    leading: CardFace(card: card, width: 34, height: 52),
+                    title: Text(_cardDescription(card), style: const TextStyle(fontWeight: FontWeight.w800)),
+                    trailing: const Icon(Icons.add_circle_outline_rounded, color: Color(0xFFD7B8FF)),
+                    onTap: () => Navigator.pop(sheetContext, id),
+                  );
+                },
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  String _cardDescription(Map<String, dynamic> card) {
+    if (card['type'] == 'dragon') {
+      final effect = card['effect']?.toString() ?? '';
+      const labels = {
+        'skip': 'Dragon Skip All',
+        'switch_direction': 'Dragon Switch Direction',
+        'draw_two': 'Dragon +2',
+        'reroll': 'Dragon Reroll 4',
+        'switch_hand': 'Dragon Switch',
+        'draw_one_all': 'Dragon +1 All',
+        'discard': 'Dragon Discard',
+        'reset_all': 'Dragon Reset All',
+        'revive': 'Dragon Revive',
+        'block': 'Dragon Block',
+      };
+      return labels[effect] ?? 'Dragon';
+    }
+    return '${(card['element'] ?? 'Colorless').toString().toUpperCase()} ${card['number'] ?? ''}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final room = controller.room;
@@ -477,11 +617,17 @@ class GameScreen extends StatelessWidget {
     final players = (room['players'] as List? ?? []).map((item) => GameController.mapData(item)).toList();
     final hand = (game['hand'] as List? ?? []).map((item) => GameController.mapData(item)).toList();
     final playableIds = (game['playableCardIds'] as List? ?? []).map((item) => item.toString()).toSet();
-    final myTurn = game['currentPlayerId'] == controller.myId && room['status'] == 'playing';
+    final winnerIds = (game['winnerIds'] as List? ?? []).map((item) => item.toString()).toSet();
+    final isWinner = game['isSpectator'] == true || winnerIds.contains(controller.myId);
+    final myTurn = game['currentPlayerId'] == controller.myId &&
+        room['status'] == 'playing' &&
+        !isWinner;
     final pendingUno = game['pendingUno']?.toString();
-    final isWinner = game['winnerId'] == controller.myId;
     final topCard = GameController.mapData(game['topCard']);
     final currentPlayer = players.where((player) => player['id'] == game['currentPlayerId']).firstOrNull;
+    final loserId = game['loserId']?.toString();
+    final loser = players.where((player) => player['id'] == loserId).firstOrNull;
+    final loserName = loser?['name']?.toString() ?? 'Pemain';
     final onlinePlayerCount = players.where((player) => player['connected'] == true).length;
 
     return Scaffold(
@@ -490,7 +636,8 @@ class GameScreen extends StatelessWidget {
         actions: [MusicToggleButton(music: music), IconButton(onPressed: controller.leaveRoom, icon: const Icon(Icons.exit_to_app_rounded), tooltip: 'Keluar permainan')],
       ),
       body: SafeArea(
-        child: Column(children: [
+        child: Stack(children: [
+          Column(children: [
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
@@ -520,7 +667,7 @@ class GameScreen extends StatelessWidget {
                 SizedBox(
                   height: 132,
                   child: hand.isEmpty
-                      ? const Center(child: Text('Tidak ada kartu di tangan.', style: TextStyle(color: Colors.white54)))
+                      ? Center(child: Text(isWinner ? 'Kamu sudah menang — sekarang menjadi spectator.' : 'Tidak ada kartu di tangan.', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white54)))
                       : ListView.separated(
                           scrollDirection: Axis.horizontal,
                           itemCount: hand.length,
@@ -539,11 +686,46 @@ class GameScreen extends StatelessWidget {
                                     if (chosenColor == null) return;
                                   }
                                   String? targetPlayerId;
-                                  if (isUnollele && card['type'] == 'dragon' && card['effect'] == 'switch_hand') {
-                                    targetPlayerId = await _chooseSwitchTarget(context, players, controller.myId);
-                                    if (targetPlayerId == null) return;
+                                  String? discardHandCardId;
+                                  String? reviveCardId;
+                                  String? blockedElement;
+                                  if (isUnollele && card['type'] == 'dragon') {
+                                    switch (card['effect']) {
+                                      case 'switch_hand':
+                                        targetPlayerId = await _chooseSwitchTarget(context, players, controller.myId);
+                                        if (targetPlayerId == null) return;
+                                        break;
+                                      case 'discard':
+                                        if (hand.length > 1) {
+                                          final choices = hand.where((item) => item['id'] != id).toList();
+                                          final selected = await _chooseDiscardHandCard(context, choices);
+                                          if (selected == null) return;
+                                          if (selected != '__none__') discardHandCardId = selected;
+                                        }
+                                        break;
+                                      case 'revive':
+                                        if (hand.length > 1) {
+                                          final discardPile = (game['discardPile'] as List? ?? [])
+                                              .map((item) => GameController.mapData(item))
+                                              .toList();
+                                          reviveCardId = await _chooseReviveCard(context, discardPile);
+                                          if (reviveCardId == null) return;
+                                        }
+                                        break;
+                                      case 'block':
+                                        blockedElement = await _chooseBlockedElement(context);
+                                        if (blockedElement == null) return;
+                                        break;
+                                    }
                                   }
-                                  controller.playCard(id, chosenColor: chosenColor, targetPlayerId: targetPlayerId);
+                                  controller.playCard(
+                                    id,
+                                    chosenColor: chosenColor,
+                                    targetPlayerId: targetPlayerId,
+                                    discardHandCardId: discardHandCardId,
+                                    reviveCardId: reviveCardId,
+                                    blockedElement: blockedElement,
+                                  );
                                 } : null,
                                 borderRadius: BorderRadius.circular(12),
                                 child: CardFace(card: card, width: 72, height: 112, glow: canPlay),
@@ -559,24 +741,18 @@ class GameScreen extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
             decoration: const BoxDecoration(color: Color(0xFF181D29), border: Border(top: BorderSide(color: Colors.white10))),
             child: Column(children: [
-              if (room['status'] == 'finished') ...[
-                Text(isWinner ? 'KAMU MENANG!' : 'PERMAINAN SELESAI', style: const TextStyle(color: accentColor, fontSize: 15, fontWeight: FontWeight.w900, letterSpacing: 1.2)),
-                const SizedBox(height: 5),
-                const Text('Mulai pertandingan baru di room yang sama tanpa memasukkan kode lagi.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 11)),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: controller.connected && onlinePlayerCount >= 2 ? controller.restartGame : null,
-                    icon: const Icon(Icons.replay_rounded),
-                    label: const Text('MAIN ULANG'),
-                    style: FilledButton.styleFrom(backgroundColor: accentColor, foregroundColor: Colors.black, disabledBackgroundColor: Colors.white12, disabledForegroundColor: Colors.white30, minimumSize: const Size.fromHeight(46)),
+              if (room['status'] == 'finished')
+                const SizedBox.shrink()
+              else if (isWinner)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 10),
+                  child: Text(
+                    'KAMU MENANG! Kamu sekarang menjadi spectator sampai permainan selesai.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: accentColor, fontSize: 12, fontWeight: FontWeight.w800),
                   ),
-                ),
-                if (onlinePlayerCount < 2)
-                  const Padding(padding: EdgeInsets.only(top: 7), child: Text('Minimal 2 pemain harus online untuk memulai ulang.', textAlign: TextAlign.center, style: TextStyle(color: Colors.orangeAccent, fontSize: 11))),
-                OutlinedButton.icon(onPressed: controller.leaveRoom, icon: const Icon(Icons.home_rounded), label: const Text('KELUAR KE BERANDA'), style: OutlinedButton.styleFrom(foregroundColor: Colors.white70, minimumSize: const Size.fromHeight(42))),
-              ] else ...[
+                )
+              else ...[
                 if (isUnollele)
                   SizedBox(width: double.infinity, child: FilledButton.icon(
                     onPressed: myTurn && game['canDraw'] == true ? controller.drawCard : null,
@@ -600,7 +776,7 @@ class GameScreen extends StatelessWidget {
                   ]),
                 if (isUnollele && myTurn)
                   const Padding(padding: EdgeInsets.only(top: 6), child: Text('Kamu boleh mengambil kartu meski masih punya kartu yang bisa dimainkan.', textAlign: TextAlign.center, style: TextStyle(fontSize: 10, color: Colors.white54))),
-                if (pendingUno != null) ...[
+                if (pendingUno != null && !isWinner) ...[
                   const SizedBox(height: 8),
                   SizedBox(width: double.infinity, child: FilledButton(
                     onPressed: pendingUno == controller.myId ? controller.callUno : controller.catchUno,
@@ -612,6 +788,70 @@ class GameScreen extends StatelessWidget {
               if (controller.notice.isNotEmpty) ...[const SizedBox(height: 8), NoticeBanner(text: controller.notice, isError: controller.noticeIsError)],
             ]),
           ),
+          ]),
+          if (room['status'] == 'finished')
+            Positioned.fill(
+              child: ColoredBox(
+                color: Colors.black.withOpacity(.76),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 340),
+                    child: Container(
+                      margin: const EdgeInsets.all(22),
+                      padding: const EdgeInsets.fromLTRB(22, 26, 22, 20),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF2B2636), Color(0xFF171B27)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: const Color(0xFFFF7777), width: 1.5),
+                        boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 30, spreadRadius: 2)],
+                      ),
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        const Icon(Icons.sentiment_very_dissatisfied_rounded, color: Color(0xFFFF7777), size: 46),
+                        const SizedBox(height: 10),
+                        Text(
+                          '$loserName KALAH',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Color(0xFFFF7777), fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: 1),
+                        ),
+                        const SizedBox(height: 20),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed: controller.connected && onlinePlayerCount >= 2 ? controller.restartGame : null,
+                            icon: const Icon(Icons.replay_rounded),
+                            label: const Text('MAIN ULANG'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: accentColor,
+                              foregroundColor: Colors.black,
+                              disabledBackgroundColor: Colors.white12,
+                              disabledForegroundColor: Colors.white30,
+                              minimumSize: const Size.fromHeight(50),
+                              textStyle: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: .7),
+                            ),
+                          ),
+                        ),
+                        if (onlinePlayerCount < 2)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 8),
+                            child: Text('Minimal 2 pemain harus online untuk memulai ulang.', textAlign: TextAlign.center, style: TextStyle(color: Colors.orangeAccent, fontSize: 11)),
+                          ),
+                        const SizedBox(height: 6),
+                        TextButton.icon(
+                          onPressed: controller.leaveRoom,
+                          icon: const Icon(Icons.home_rounded, size: 17),
+                          label: const Text('KELUAR KE BERANDA'),
+                          style: TextButton.styleFrom(foregroundColor: Colors.white70),
+                        ),
+                      ]),
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ]),
       ),
     );
@@ -635,7 +875,13 @@ class GameScreen extends StatelessWidget {
         boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 14, offset: Offset(0, 5))],
       ),
       child: Column(mainAxisAlignment: MainAxisAlignment.center, mainAxisSize: MainAxisSize.min, children: [
-        Text(isFinished ? (isWinner ? 'KAMU MENANG' : 'SELESAI') : (myTurn ? 'GILIRANMU' : currentPlayerName.toUpperCase()), maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: TextStyle(color: isFinished || myTurn ? accentColor : Colors.white70, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: .8)),
+        Text(
+          isFinished ? 'PERMAINAN SELESAI' : (isWinner ? 'SPECTATOR' : (myTurn ? 'GILIRANMU' : currentPlayerName.toUpperCase())),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: TextStyle(color: isFinished || isWinner || myTurn ? accentColor : Colors.white70, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: .8),
+        ),
         const SizedBox(height: 6),
         Row(mainAxisAlignment: MainAxisAlignment.center, children: [
           Column(children: [
@@ -651,9 +897,17 @@ class GameScreen extends StatelessWidget {
           ]),
           const SizedBox(width: 8),
           Column(children: [
-            Transform.rotate(angle: (game['direction'] == -1) ? math.pi : 0, child: const Icon(Icons.sync_alt_rounded, color: Colors.white70, size: 25)),
+            Icon(
+              game['direction'] == -1 ? Icons.rotate_left_rounded : Icons.rotate_right_rounded,
+              color: Colors.white70,
+              size: 26,
+            ),
             const SizedBox(height: 4),
-            Text(game['direction'] == -1 ? 'REVERSE' : 'ARAH', style: const TextStyle(color: Colors.white54, fontSize: 8, fontWeight: FontWeight.bold)),
+            Text(
+              game['direction'] == -1 ? 'BERLAWANAN ARAH' : 'SEARAH JARUM JAM',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white54, fontSize: 6.5, fontWeight: FontWeight.bold),
+            ),
           ]),
         ]),
         const SizedBox(height: 6),
@@ -662,6 +916,8 @@ class GameScreen extends StatelessWidget {
         Text(game['lastMove']?.toString() ?? 'Permainan dimulai', maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60, fontSize: 8, height: 1.2)),
         if (isUnollele && topCard.isNotEmpty)
           Text(_unolleleRuleHint(topCard), maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFFD6C1FF), fontSize: 7, height: 1.15)),
+        if (isUnollele && game['blockedElement'] != null)
+          Text('BLOCK: ${game['blockedElement'].toString().toUpperCase()} • sampai giliran pemain pemblokir', maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFFFF9B9B), fontSize: 7, fontWeight: FontWeight.w800, height: 1.15)),
         if (game['pendingUno'] != null)
           const Text('UNO BELUM DIPANGGIL!', style: TextStyle(color: accentColor, fontSize: 8, fontWeight: FontWeight.w900)),
       ]),
@@ -759,20 +1015,21 @@ class PlayerSeat extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final name = player['name']?.toString() ?? 'Player';
+    final spectator = player['isSpectator'] == true;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
       decoration: BoxDecoration(
-        color: isCurrent ? const Color(0xFF4A4529) : const Color(0xFF202A35),
+        color: spectator ? const Color(0xFF26382F) : (isCurrent ? const Color(0xFF4A4529) : const Color(0xFF202A35)),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: isCurrent ? accentColor : Colors.white24, width: isCurrent ? 2 : 1),
+        border: Border.all(color: spectator ? greenCard : (isCurrent ? accentColor : Colors.white24), width: isCurrent || spectator ? 2 : 1),
         boxShadow: isCurrent ? [const BoxShadow(color: Color(0x66FFD447), blurRadius: 10)] : null,
       ),
       child: Row(children: [
         CircleAvatar(radius: compact ? 10 : 12, backgroundColor: _avatarColor(name), child: Text(name.isEmpty ? '?' : name.characters.first.toUpperCase(), style: TextStyle(fontSize: compact ? 9 : 10, color: Colors.black, fontWeight: FontWeight.w900))),
         const SizedBox(width: 4),
         Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(isMe ? 'KAMU' : name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: compact ? 8 : 9, fontWeight: FontWeight.w900, color: isCurrent ? accentColor : Colors.white)),
-          Text('${player['cardCount'] ?? 0} kartu${player['connected'] == true ? '' : ' • offline'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 8, color: Colors.white60)),
+          Text(spectator ? '${isMe ? 'KAMU' : name} • MENANG' : (isMe ? 'KAMU' : name), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: compact ? 8 : 9, fontWeight: FontWeight.w900, color: spectator ? greenCard : (isCurrent ? accentColor : Colors.white))),
+          Text(spectator ? 'SPECTATOR' : '${player['cardCount'] ?? 0} kartu${player['connected'] == true ? '' : ' • offline'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 8, color: Colors.white60)),
         ])),
       ]),
     );
@@ -858,12 +1115,16 @@ class CardFace extends StatelessWidget {
     final number = card['number']?.toString() ?? '';
     final effect = card['effect']?.toString() ?? '';
     final effectLabel = switch (effect) {
-      'skip' => 'SKIP',
+      'skip' => 'SKIP ALL',
       'switch_direction' => 'REVERSE',
       'draw_two' => '+2',
-      'reset' => 'RESET',
+      'reroll' => 'REROLL 4',
       'switch_hand' => 'SWITCH',
-      'draw_one_all' => '+1 ALL',
+      'draw_one_all' => '+1 OTHERS',
+      'discard' => 'DISCARD',
+      'reset_all' => 'RESET ALL',
+      'revive' => 'REVIVE',
+      'block' => 'BLOCK',
       _ => 'DRAGON',
     };
     final icon = isDragon ? Icons.auto_awesome_rounded : _elementIcon(element);
@@ -951,18 +1212,22 @@ IconData _elementIcon(String element) => switch (element) {
 };
 
 String _unolleleRuleHint(Map<String, dynamic> topCard) {
-  if (topCard['type'] == 'dragon') return 'Semua tipe dapat dimainkan; Dragon juga bisa ditumpuk.';
+  if (topCard['type'] == 'dragon') {
+    return 'Colorless 10 dapat melawan Dragon; elemen lain mengikuti aturan weakness.';
+  }
   final element = topCard['element']?.toString() ?? '';
+  if (element == 'colorless') {
+    return 'Colorless 10: dapat dikalahkan semua kartu elemental (angka berapa pun); Dragon tidak bisa.';
+  }
   const weakness = {
     'fire': 'Water / Ground',
     'water': 'Grass / Electric',
     'grass': 'Fire',
     'electric': 'Ground',
     'ground': 'Water / Grass',
-    'colorless': 'Semua elemen; Dragon tidak bisa di atas Colorless',
   };
   final weakTypes = weakness[element] ?? '-';
-  return 'Weakness: $weakTypes • Colorless universal; Dragon tidak bisa di atas Colorless';
+  return 'Weakness: $weakTypes • Colorless 10 hanya di atas angka yang lebih rendah atau Dragon';
 }
 
 class NoticeBanner extends StatelessWidget {

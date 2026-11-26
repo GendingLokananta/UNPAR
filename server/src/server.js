@@ -223,7 +223,12 @@ io.on('connection', (socket) => {
   });
 
   bindAction(socket, 'play_card', (room, playerId, payload) => {
-    gameEngine.playCard(room, playerId, String(payload.cardId || ''), payload.chosenColor, payload.targetPlayerId);
+    gameEngine.playCard(room, playerId, String(payload.cardId || ''), payload.chosenColor, {
+      targetPlayerId: payload.targetPlayerId,
+      discardHandCardId: payload.discardHandCardId,
+      reviveCardId: payload.reviveCardId,
+      blockedElement: payload.blockedElement,
+    });
   });
   bindAction(socket, 'draw_card', (room, playerId) => gameEngine.drawOne(room, playerId));
   bindAction(socket, 'pass_turn', (room, playerId) => gameEngine.passTurn(room, playerId));
@@ -268,11 +273,15 @@ io.on('connection', (socket) => {
       }
     } else {
       const wasCurrent = room.game?.currentPlayerId === playerId;
-      const oldIndex = room.game?.order.indexOf(playerId) ?? -1;
       if (room.game) {
         room.game.order = room.game.order.filter((id) => id !== playerId);
         delete room.game.hands[playerId];
         if (room.game.pendingUno === playerId) room.game.pendingUno = null;
+        if (room.game.winnerIds) room.game.winnerIds = room.game.winnerIds.filter((id) => id !== playerId);
+        if (room.game.blockedByPlayerId === playerId) {
+          room.game.blockedElement = null;
+          room.game.blockedByPlayerId = null;
+        }
       }
       room.players = room.players.filter((item) => item.id !== playerId);
       if (room.rematchVotes) {
@@ -284,15 +293,23 @@ io.on('connection', (socket) => {
         clearTurnTimer(room.code);
         rooms.delete(room.code);
       } else {
-        if (room.status === 'playing' && room.players.length < gameEngine.MIN_PLAYERS) {
-          clearTurnTimer(room.code);
-          room.status = 'finished';
-          room.game.winnerId = room.players[0]?.id ?? null;
-          room.game.lastMove = room.players[0] ? `${room.players[0].name} menang karena pemain lain keluar` : 'Permainan berakhir';
+        if (room.status === 'playing' && room.game) {
+          const activeIds = gameEngine.activePlayerIds(room.game);
+          if (activeIds.length <= 1) {
+            clearTurnTimer(room.code);
+            room.status = 'finished';
+            room.game.loserId = activeIds[0] || null;
+            room.game.currentPlayerId = activeIds[0] || null;
+            room.game.turnDeadline = null;
+            const loser = room.players.find((item) => item.id === room.game.loserId);
+            room.game.lastMove = loser ? `${loser.name} kalah!` : 'Permainan berakhir';
+          } else if (wasCurrent) {
+            room.game.currentPlayerId = gameEngine.nextPlayerId(room.game, room, playerId, 1);
+            room.game.turnHasDrawn = false;
+            room.game.drawnCardId = null;
+          }
         } else if (wasCurrent && room.game && room.game.order.length > 0) {
-          const length = room.game.order.length;
-          const nextIndex = room.game.direction === 1 ? oldIndex % length : (oldIndex - 1 + length) % length;
-          room.game.currentPlayerId = room.game.order[nextIndex];
+          room.game.currentPlayerId = gameEngine.nextPlayerId(room.game, room, playerId, 1);
           room.game.turnHasDrawn = false;
           room.game.drawnCardId = null;
         }
@@ -322,6 +339,10 @@ io.on('connection', (socket) => {
     } else {
       player.connected = false;
       player.socketId = null;
+      if (room.game?.blockedByPlayerId === playerId) {
+        room.game.blockedElement = null;
+        room.game.blockedByPlayerId = null;
+      }
       if (room.game?.currentPlayerId === playerId && room.status === 'playing') {
         room.game.pendingUno = room.game.pendingUno === playerId ? null : room.game.pendingUno;
         room.game.currentPlayerId = gameEngine.nextPlayerId(room.game, room, playerId, 1);

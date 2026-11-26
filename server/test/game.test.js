@@ -100,3 +100,46 @@ test('15-second timeout also draws two cards and skips the turn in UNO Classic',
   assert.equal(game.currentPlayerId, otherId);
   assert.match(game.lastMove, /Waktu habis/);
 });
+
+
+test('UNO Classic also continues after winners become spectators until the last player loses', () => {
+  const roomPlayers = players(4);
+  const [first, second, third, last] = roomPlayers;
+  const game = createGame(roomPlayers);
+  game.currentPlayerId = first.id;
+  game.direction = 1;
+  game.currentColor = 'red';
+  game.currentValue = '5';
+  game.discard = [{ id: 'classic-top', color: 'red', value: '5' }];
+  game.deck = [];
+  game.hands[first.id] = [{ id: 'first-last', color: 'red', value: '6' }];
+  game.hands[second.id] = [{ id: 'second-last', color: 'red', value: '7' }];
+  game.hands[third.id] = [{ id: 'third-last', color: 'red', value: '8' }];
+  game.hands[last.id] = [{ id: 'last-card', color: 'red', value: '9' }];
+  const room = {
+    code: 'CLASS-OUT',
+    gameMode: 'classic',
+    status: 'playing',
+    hostId: first.id,
+    players: roomPlayers,
+    game,
+  };
+
+  playCard(room, first.id, 'first-last');
+  assert.equal(room.status, 'playing');
+  assert.deepEqual(game.winnerIds, [first.id]);
+  assert.equal(game.currentPlayerId, second.id);
+  assert.throws(() => playCard(room, first.id, 'first-last'), /spectator/);
+
+  playCard(room, second.id, 'second-last');
+  assert.equal(room.status, 'playing');
+  assert.deepEqual(game.winnerIds, [first.id, second.id]);
+  assert.equal(game.currentPlayerId, third.id);
+
+  playCard(room, third.id, 'third-last');
+  assert.equal(room.status, 'finished');
+  assert.deepEqual(game.winnerIds, [first.id, second.id, third.id]);
+  assert.equal(game.loserId, last.id);
+  assert.equal(game.currentPlayerId, last.id);
+  assert.equal(game.turnDeadline, null);
+});

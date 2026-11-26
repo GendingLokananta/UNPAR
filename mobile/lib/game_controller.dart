@@ -126,10 +126,17 @@ class GameController extends ChangeNotifier {
     });
     socket.on('room_state', (data) {
       state = mapData(data);
-      final code = mapData(state?['room'])['code']?.toString() ?? '';
+      final roomState = mapData(state?['room']);
+      final code = roomState['code']?.toString() ?? '';
       if (code.isNotEmpty) {
         roomCode = code;
         _prefs?.setString('room_code', code);
+      }
+      // The successful-join notice is only useful in the lobby.
+      // Clear it as soon as the server reports that the game has started.
+      if (roomState['status'] == 'playing' && notice.startsWith('Berhasil masuk room ')) {
+        notice = '';
+        noticeIsError = false;
       }
       notifyListeners();
     });
@@ -194,9 +201,15 @@ class GameController extends ChangeNotifier {
   void _acceptJoinResult(Map<String, dynamic> result) {
     if (result['ok'] != true) throw Exception(result['error']?.toString() ?? 'Tidak bisa masuk ke room.');
     state = mapData(result['state']);
-    roomCode = mapData(state?['room'])['code']?.toString() ?? '';
+    final joinedRoom = mapData(state?['room']);
+    roomCode = joinedRoom['code']?.toString() ?? '';
     _prefs?.setString('room_code', roomCode);
-    setNotice('Berhasil masuk room $roomCode');
+    if (joinedRoom['status'] == 'playing') {
+      notice = '';
+      noticeIsError = false;
+    } else {
+      setNotice('Berhasil masuk room $roomCode');
+    }
   }
 
   Future<void> _performBusy(Future<void> Function() action) async {
@@ -232,10 +245,20 @@ class GameController extends ChangeNotifier {
   void catchUno() => _send('catch_uno');
   void voteRematch({required bool playAgain}) => _send('vote_rematch', {'choice': playAgain ? 'yes' : 'no'});
   void restartGame() => _send('restart_game');
-  void playCard(String cardId, {String? chosenColor, String? targetPlayerId}) => _send('play_card', {
+  void playCard(
+    String cardId, {
+    String? chosenColor,
+    String? targetPlayerId,
+    String? discardHandCardId,
+    String? reviveCardId,
+    String? blockedElement,
+  }) => _send('play_card', {
         'cardId': cardId,
         if (chosenColor != null) 'chosenColor': chosenColor,
         if (targetPlayerId != null) 'targetPlayerId': targetPlayerId,
+        if (discardHandCardId != null) 'discardHandCardId': discardHandCardId,
+        if (reviveCardId != null) 'reviveCardId': reviveCardId,
+        if (blockedElement != null) 'blockedElement': blockedElement,
       });
 
   Future<void> leaveRoom() async {

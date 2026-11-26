@@ -15,13 +15,20 @@ const UNOLLELE_WEAKNESS = Object.freeze({
   colorless: ['fire', 'water', 'grass', 'electric', 'ground'],
   dragon: ['fire', 'water', 'grass', 'electric', 'ground', 'colorless', 'dragon'],
 });
+const UNOLLELE_BLOCKABLE_ELEMENTS = Object.freeze([
+  'fire', 'water', 'grass', 'electric', 'ground', 'colorless', 'dragon',
+]);
 const DRAGON_EFFECT_COPIES = Object.freeze({
   skip: 4,
   switch_direction: 4,
   draw_two: 4,
-  reset: 4,
-  switch_hand: 2,
+  reroll: 4,
+  switch_hand: 3,
   draw_one_all: 4,
+  discard: 4,
+  reset_all: 1,
+  revive: 4,
+  block: 4,
 });
 const DRAGON_EFFECTS = Object.freeze(Object.keys(DRAGON_EFFECT_COPIES));
 const UNOLLELE_STARTING_HAND = 7;
@@ -96,9 +103,9 @@ function createUnolleleDeck() {
       deck.push(makeUnolleleNumberCard(element, number));
     }
   }
-  // Colorless is a universal counter card: only one copy of each number.
-  for (let number = 1; number <= 10; number += 1) {
-    deck.push(makeUnolleleNumberCard('colorless', number));
+  // Ten identical Colorless 10 cards.
+  for (let copy = 0; copy < 10; copy += 1) {
+    deck.push(makeUnolleleNumberCard('colorless', 10));
   }
   for (const effect of DRAGON_EFFECTS) {
     for (let copy = 0; copy < DRAGON_EFFECT_COPIES[effect]; copy += 1) {
@@ -138,6 +145,8 @@ function createGame(players) {
     direction: 1,
     currentPlayerId: players[0].id,
     winnerId: null,
+    winnerIds: [],
+    loserId: null,
     lastMove: `${players[0].name} memulai permainan`,
     pendingUno: null,
     turnHasDrawn: false,
@@ -168,6 +177,10 @@ function createUnolleleGame(players) {
     direction: 1,
     currentPlayerId: players[0].id,
     winnerId: null,
+    winnerIds: [],
+    loserId: null,
+    blockedElement: null,
+    blockedByPlayerId: null,
     lastMove: `${players[0].name} memulai UNOLLELE`,
     pendingUno: null,
     turnHasDrawn: false,
@@ -201,7 +214,16 @@ function drawCards(game, playerId, amount) {
   return drawn;
 }
 
+function isSpectator(game, playerId) {
+  return (game.winnerIds || []).includes(playerId);
+}
+
+function activePlayerIds(game) {
+  return game.order.filter((playerId) => !isSpectator(game, playerId));
+}
+
 function nextPlayerId(game, room, fromId, steps = 1) {
+  if (!game.order.length) return fromId;
   let index = game.order.indexOf(fromId);
   if (index < 0) index = 0;
   let candidate = fromId;
@@ -210,12 +232,56 @@ function nextPlayerId(game, room, fromId, steps = 1) {
     index = (index + game.direction + game.order.length) % game.order.length;
     candidate = game.order[index];
     const player = room.players.find((p) => p.id === candidate);
-    if (player && player.connected) {
+    if (player && player.connected && !isSpectator(game, candidate)) {
       steps -= 1;
       if (steps <= 0) return candidate;
     }
   }
   return fromId;
+}
+
+function updateBlockedTurn(game, nextPlayerId) {
+  if (game.blockedElement && game.blockedByPlayerId === nextPlayerId) {
+    game.blockedElement = null;
+    game.blockedByPlayerId = null;
+  }
+}
+
+function setNextTurn(room, fromId, steps = 1) {
+  const game = room.game;
+  const nextId = nextPlayerId(game, room, fromId, steps);
+  game.currentPlayerId = nextId;
+  updateBlockedTurn(game, nextId);
+  return nextId;
+}
+
+function recordPlayerWinners(room, playerIds, message) {
+  const game = room.game;
+  if (!game.winnerIds) game.winnerIds = game.winnerId ? [game.winnerId] : [];
+  for (const playerId of playerIds) {
+    if (!playerId || game.winnerIds.includes(playerId)) continue;
+    game.winnerIds.push(playerId);
+    if (game.pendingUno === playerId) game.pendingUno = null;
+  }
+  if (game.winnerIds.length > 0 && !game.winnerId) game.winnerId = game.winnerIds[0];
+
+  if (game.blockedByPlayerId && isSpectator(game, game.blockedByPlayerId)) {
+    game.blockedElement = null;
+    game.blockedByPlayerId = null;
+  }
+  const active = activePlayerIds(game);
+  if (active.length <= 1) {
+    const loserId = active[0] || null;
+    game.loserId = loserId;
+    room.status = 'finished';
+    game.currentPlayerId = loserId || game.winnerIds[0] || null;
+    game.turnDeadline = null;
+    const loserName = room.players.find((item) => item.id === loserId)?.name || 'Pemain';
+    game.lastMove = `${loserName} kalah!`;
+    return { finished: true, loserId };
+  }
+  game.lastMove = message;
+  return { finished: false, loserId: null };
 }
 
 function canPlayClassicCard(game, hand, card) {
@@ -235,27 +301,35 @@ function canPlayUnolleleCard(game, card) {
   const topCard = game.discard[game.discard.length - 1];
   if (!topCard) return false;
 
-  // Dragon can be played over every card except a Colorless top card.
-  // Dragon-on-Dragon is allowed; Colorless is the one explicit counter-exception.
+  const cardElement = card.type === 'dragon' ? 'dragon' : card.element;
+  if (game.blockedElement && cardElement === game.blockedElement) return false;
+
+  // Dragon cannot be played on Colorless. Every Dragon can be answered by Colorless 10.
   if (card.type === 'dragon') return topCard.element !== 'colorless';
 
   if (card.type !== 'number' || !UNOLLELE_ELEMENTS.includes(card.element)) return false;
 
-  // Every numbered element, including Colorless, can be played over Dragon.
+  // Number cards, including Colorless, can always be played on a Dragon.
   if (topCard.type === 'dragon' || topCard.element === 'dragon') return true;
   if (topCard.type !== 'number' || !UNOLLELE_ELEMENTS.includes(topCard.element)) return false;
 
-  // Colorless is universal: it can counter every non-Dragon type.
-  // When Colorless is already on top, the normal higher-number rule applies.
-  if (card.element === 'colorless' && topCard.element !== 'colorless') return true;
+  // Colorless 10 beats elemental cards only when 10 is strictly higher.
+  if (card.element === 'colorless') {
+    if (topCard.element === 'colorless') return card.number > topCard.number;
+    return card.number > topCard.number;
+  }
+
+  // Any elemental number can beat Colorless, regardless of its value.
+  if (topCard.element === 'colorless') {
+    return UNOLLELE_NUMBER_ELEMENTS.includes(card.element);
+  }
 
   // Same element: only a strictly higher number is allowed.
   if (card.element === topCard.element) return card.number > topCard.number;
 
-  // Weakness relation: the next card's element may be any weakness of the top.
+  // Different elemental types follow the established weakness chart.
   return (UNOLLELE_WEAKNESS[topCard.element] || []).includes(card.element);
 }
-
 function canPlayCard(game, hand, card) {
   if (game?.mode === GAME_MODES.UNOLLELE) return canPlayUnolleleCard(game, card);
   return canPlayClassicCard(game, hand, card);
@@ -264,6 +338,7 @@ function canPlayCard(game, hand, card) {
 function getPlayableCards(game, playerId) {
   const hand = game.hands[playerId] || [];
   if (game.mode === GAME_MODES.UNOLLELE) {
+    if (isSpectator(game, playerId)) return [];
     return hand.filter((card) => canPlayUnolleleCard(game, card)).map((card) => card.id);
   }
   if (game.turnHasDrawn && game.drawnCardId) {
@@ -276,6 +351,9 @@ function getPlayableCards(game, playerId) {
 
 function ensureTurn(room, playerId) {
   if (room.status !== 'playing' || !room.game) throw new Error('Permainan belum dimulai.');
+  if (isSpectator(room.game, playerId)) {
+    throw new Error('Kamu sudah menang dan sekarang menjadi spectator.');
+  }
   if (room.game.currentPlayerId !== playerId) throw new Error('Belum giliranmu.');
 }
 
@@ -290,6 +368,9 @@ function resolveUncalledUno(game) {
 function callUno(room, playerId) {
   const game = room.game;
   if (room.status !== 'playing') throw new Error('Permainan belum dimulai.');
+  if (isSpectator(game, playerId)) {
+    throw new Error('Pemain spectator tidak dapat melakukan aksi gameplay.');
+  }
   if (game.pendingUno !== playerId) throw new Error('Belum ada UNO yang perlu kamu konfirmasi.');
   if ((game.hands[playerId] || []).length !== 1) throw new Error('UNO hanya bisa dipanggil saat kartumu tersisa satu.');
   game.pendingUno = null;
@@ -299,6 +380,9 @@ function callUno(room, playerId) {
 function catchUno(room, catcherId) {
   const game = room.game;
   if (room.status !== 'playing' || !game.pendingUno) throw new Error('Tidak ada pemain yang belum memanggil UNO.');
+  if (isSpectator(game, catcherId)) {
+    throw new Error('Pemain spectator tidak dapat melakukan aksi gameplay.');
+  }
   if (game.pendingUno === catcherId) throw new Error('Kamu tidak bisa menangkap UNO-mu sendiri.');
   const targetId = game.pendingUno;
   drawCards(game, targetId, 2);
@@ -334,15 +418,6 @@ function playClassicCard(room, playerId, cardId, chosenColor) {
 
   const player = room.players.find((p) => p.id === playerId);
   const name = player?.name || 'Pemain';
-  if (hand.length === 0) {
-    game.winnerId = playerId;
-    room.status = 'finished';
-    game.pendingUno = null;
-    game.lastMove = `${name} menang!`;
-    game.turnDeadline = null;
-    return { penalized };
-  }
-
   if (hand.length === 1) game.pendingUno = playerId;
 
   let steps = 1;
@@ -353,16 +428,28 @@ function playClassicCard(room, playerId, cardId, chosenColor) {
   }
   if (card.value === 'draw2' || card.value === 'wild_draw4') {
     const targetId = nextPlayerId(game, room, playerId, 1);
-    drawCards(game, targetId, card.value === 'draw2' ? 2 : 4);
+    if (targetId !== playerId) drawCards(game, targetId, card.value === 'draw2' ? 2 : 4);
     steps = 2;
   }
-  game.currentPlayerId = nextPlayerId(game, room, playerId, steps);
+
+  if (hand.length === 0) {
+    const result = recordPlayerWinners(room, [playerId], `${name} menang dan sekarang menjadi spectator`);
+    if (result.finished) return { penalized, loserId: result.loserId };
+  }
+
+  setNextTurn(room, playerId, steps);
   game.turnDeadline = Date.now() + TURN_DURATION_MS;
-  game.lastMove = `${name} memainkan ${card.value === 'wild_draw4' ? 'Wild +4' : card.value === 'draw2' ? '+2' : card.value === 'reverse' ? 'Reverse' : card.value === 'skip' ? 'Skip' : card.value === 'wild' ? 'Wild' : card.value}`;
+  const label = card.value === 'wild_draw4' ? 'Wild +4'
+    : card.value === 'draw2' ? '+2'
+    : card.value === 'reverse' ? 'Reverse'
+    : card.value === 'skip' ? 'Skip'
+    : card.value === 'wild' ? 'Wild'
+    : card.value;
+  game.lastMove = `${name} memainkan ${label}`;
+  if (isSpectator(game, playerId)) game.lastMove += ` — ${name} menang dan menjadi spectator`;
   if (penalized) game.lastMove += ' · Penalti UNO +2 diterapkan';
   return { penalized };
 }
-
 function recycleDiscardIntoDeck(game) {
   if (game.discard.length <= 1) return;
   const top = game.discard.pop();
@@ -371,28 +458,57 @@ function recycleDiscardIntoDeck(game) {
   shuffle(game.deck);
 }
 
-function playUnolleleCard(room, playerId, cardId, targetPlayerId) {
+function playUnolleleCard(room, playerId, cardId, options = {}) {
   const game = room.game;
   let hand = game.hands[playerId];
   const cardIndex = hand.findIndex((card) => card.id === cardId);
   if (cardIndex < 0) throw new Error('Kartu tidak ditemukan di tanganmu.');
   const card = hand[cardIndex];
   if (!canPlayUnolleleCard(game, card)) {
-    throw new Error('Kartu tidak valid. Periksa aturan angka dan weakness UNOLLELE.');
+    throw new Error('Kartu tidak valid atau elemennya sedang diblokir. Periksa aturan UNOLLELE.');
   }
+
+  const {
+    targetPlayerId,
+    discardHandCardId,
+    reviveCardId,
+    blockedElement,
+  } = options || {};
 
   let switchTarget = null;
   if (card.type === 'dragon' && card.effect === 'switch_hand') {
     const targetId = String(targetPlayerId || '').trim();
-    switchTarget = room.players.find((player) => player.id === targetId && player.connected && targetId !== playerId);
-    if (!switchTarget || !game.hands[targetId] || !game.order.includes(targetId)) {
-      throw new Error('Pilih pemain lain yang sedang online untuk Dragon Switch.');
+    switchTarget = room.players.find((player) =>
+      player.id === targetId &&
+      player.connected &&
+      targetId !== playerId &&
+      !isSpectator(game, targetId) &&
+      game.hands[targetId] &&
+      game.order.includes(targetId));
+    if (!switchTarget) {
+      throw new Error('Pilih pemain lain yang masih aktif dan sedang online untuk Dragon Switch.');
+    }
+  }
+
+  let discardHandCard = null;
+  if (card.type === 'dragon' && card.effect === 'discard' && discardHandCardId) {
+    discardHandCard = hand.find((item) => item.id === discardHandCardId && item.id !== card.id) || null;
+    if (!discardHandCard) throw new Error('Pilih satu kartu lain dari tanganmu untuk Dragon Discard.');
+  }
+
+  let reviveCard = null;
+  if (card.type === 'dragon' && card.effect === 'revive' && hand.length > 1) {
+    reviveCard = game.discard.find((item) => item.id === reviveCardId) || null;
+    if (!reviveCard) throw new Error('Pilih satu kartu dari discard pile untuk Dragon Revive.');
+  }
+
+  if (card.type === 'dragon' && card.effect === 'block') {
+    if (!UNOLLELE_BLOCKABLE_ELEMENTS.includes(blockedElement)) {
+      throw new Error('Pilih elemen yang ingin diblokir oleh Dragon Block.');
     }
   }
 
   const penalized = game.pendingUno ? resolveUncalledUno(game) : null;
-  // A pending UNO penalty may add two cards to this same hand. Re-find the card
-  // after the penalty has been applied; the card remains in the hand.
   const actualIndex = hand.findIndex((item) => item.id === cardId);
   if (actualIndex < 0) throw new Error('Kartu tidak ditemukan setelah penalti UNO.');
   hand.splice(actualIndex, 1);
@@ -402,43 +518,46 @@ function playUnolleleCard(room, playerId, cardId, targetPlayerId) {
 
   const player = room.players.find((p) => p.id === playerId);
   const name = player?.name || 'Pemain';
+  const effectLabels = {
+    skip: 'Dragon Skip All',
+    switch_direction: 'Dragon Reverse',
+    draw_two: 'Dragon +2',
+    reroll: 'Dragon Reroll 4',
+    switch_hand: 'Dragon Switch',
+    draw_one_all: 'Dragon +1 All',
+    discard: 'Dragon Discard',
+    reset_all: 'Dragon Reset All',
+    revive: 'Dragon Revive',
+    block: 'Dragon Block',
+  };
   let moveLabel = card.type === 'dragon'
-    ? ({
-        skip: 'Dragon Skip',
-        switch_direction: 'Dragon Switch Direction',
-        draw_two: 'Dragon +2',
-        reset: 'Dragon Reset',
-        switch_hand: 'Dragon Switch',
-        draw_one_all: 'Dragon +1 All',
-      }[card.effect] || 'Dragon')
+    ? (effectLabels[card.effect] || 'Dragon')
     : `${card.element.toUpperCase()} ${card.number}`;
 
   let nextSteps = 1;
   let samePlayerAgain = false;
+  let emptiedPlayerIds = [];
 
   if (card.type === 'dragon') {
     switch (card.effect) {
       case 'skip':
-        // All other players are skipped; this player receives another turn.
+        // Dragon Skip All keeps the turn with the player who played it.
         samePlayerAgain = true;
         break;
       case 'switch_direction': {
         game.direction *= -1;
-        const connectedCount = room.players.filter((item) => item.connected && game.order.includes(item.id)).length;
-        // In a two-player duel, reversing direction gives the turn back to the player.
-        if (connectedCount === 2) samePlayerAgain = true;
+        const activeConnectedCount = room.players.filter((item) =>
+          item.connected && game.order.includes(item.id) && !isSpectator(game, item.id)).length;
+        if (activeConnectedCount === 2) samePlayerAgain = true;
         break;
       }
       case 'draw_two': {
         const targetId = nextPlayerId(game, room, playerId, 1);
-        drawCards(game, targetId, 2);
-        // The penalized player loses their turn.
+        if (targetId !== playerId) drawCards(game, targetId, 2);
         nextSteps = 2;
         break;
       }
-      case 'reset': {
-        // The Reset card remains on top. Return every other card in this hand
-        // to the draw pile, shuffle, then deal four replacement cards.
+      case 'reroll': {
         game.deck.push(...hand.splice(0, hand.length));
         shuffle(game.deck);
         drawCards(game, playerId, 4);
@@ -454,17 +573,63 @@ function playUnolleleCard(room, playerId, cardId, targetPlayerId) {
         game.hands[targetId] = hand;
         hand = game.hands[playerId];
         moveLabel += ` dengan ${targetName} (tukar seluruh kartu tangan)`;
-        // Either participant may now have exactly one card after the exchange.
-        game.pendingUno = hand.length === 1
+        emptiedPlayerIds = [playerId, targetId].filter((id) => game.hands[id].length === 0);
+        game.pendingUno = game.hands[playerId].length === 1
           ? playerId
           : (game.hands[targetId].length === 1 ? targetId : null);
         break;
       }
       case 'draw_one_all': {
-        // Every player in this game, including the player who used the card,
-        // draws one card. The order includes temporarily disconnected players.
-        for (const targetId of game.order) drawCards(game, targetId, 1);
-        moveLabel += ' (semua pemain +1 kartu)';
+        // Every other active player draws one card; the player using this card is excluded.
+        for (const targetId of activePlayerIds(game)) {
+          if (targetId !== playerId) drawCards(game, targetId, 1);
+        }
+        moveLabel += ' (semua pemain lain +1 kartu)';
+        break;
+      }
+      case 'discard': {
+        if (discardHandCard) {
+          const index = hand.findIndex((item) => item.id === discardHandCard.id);
+          if (index >= 0) {
+            const [discarded] = hand.splice(index, 1);
+            game.discard.push(discarded); // The discarded card's effect is not activated.
+            moveLabel += ` (buang ${discarded.type === 'dragon' ? 'Dragon' : `${discarded.element} ${discarded.number}`})`;
+          }
+        }
+        if (hand.length === 0) emptiedPlayerIds.push(playerId);
+        break;
+      }
+      case 'reset_all': {
+        // Keep Dragon Reset All on top; all remaining active hands become inert discard cards.
+        const resetCardOnTop = game.discard.pop();
+        for (const activeId of activePlayerIds(game)) {
+          const activeHand = game.hands[activeId] || [];
+          game.discard.push(...activeHand.splice(0, activeHand.length));
+          game.pendingUno = null;
+        }
+        game.discard.push(resetCardOnTop);
+        for (const activeId of activePlayerIds(game)) drawCards(game, activeId, 7);
+        moveLabel += ' (semua pemain aktif reset ke 7 kartu)';
+        break;
+      }
+      case 'revive': {
+        // If Dragon Revive was the final card, the player wins without taking a card back.
+        if (hand.length > 0 && reviveCard) {
+          const index = game.discard.findIndex((item) => item.id === reviveCard.id);
+          if (index >= 0) {
+            const [recovered] = game.discard.splice(index, 1);
+            hand.push(recovered);
+            moveLabel += ' (ambil 1 kartu dari discard pile)';
+          }
+        } else if (hand.length === 0) {
+          emptiedPlayerIds.push(playerId);
+        }
+        break;
+      }
+      case 'block': {
+        game.blockedElement = blockedElement;
+        game.blockedByPlayerId = playerId;
+        moveLabel += ` (blokir ${String(blockedElement).toUpperCase()} sampai giliranmu kembali)`;
         break;
       }
       default:
@@ -477,51 +642,41 @@ function playUnolleleCard(room, playerId, cardId, targetPlayerId) {
     else if (hand.length !== 1 && game.pendingUno === playerId) game.pendingUno = null;
   }
 
-  if (samePlayerAgain) {
+  if (hand.length === 0 && !emptiedPlayerIds.includes(playerId)) {
+    emptiedPlayerIds.push(playerId);
+  }
+
+  const playerNames = emptiedPlayerIds.map((id) =>
+    room.players.find((item) => item.id === id)?.name || 'Pemain');
+  if (emptiedPlayerIds.length > 0) {
+    const result = recordPlayerWinners(
+      room,
+      emptiedPlayerIds,
+      `${playerNames.join(', ')} berhasil menang dan sekarang menjadi spectator`,
+    );
+    if (result.finished) return { penalized, loserId: result.loserId };
+  }
+
+  if (samePlayerAgain && !isSpectator(game, playerId)) {
     game.currentPlayerId = playerId;
   } else {
-    game.currentPlayerId = nextPlayerId(game, room, playerId, nextSteps);
+    setNextTurn(room, playerId, nextSteps);
   }
   game.turnDeadline = Date.now() + TURN_DURATION_MS;
-
-  // A hand swap can leave one participant with zero cards when Switch is the
-  // user's final card. End the game for whoever actually has the empty hand.
-  if (card.type === 'dragon' && card.effect === 'switch_hand') {
-    const targetId = switchTarget.id;
-    const switchWinnerId = game.hands[playerId].length === 0
-      ? playerId
-      : (game.hands[targetId].length === 0 ? targetId : null);
-    if (switchWinnerId) {
-      const winnerName = room.players.find((item) => item.id === switchWinnerId)?.name || 'Pemain';
-      game.winnerId = switchWinnerId;
-      room.status = 'finished';
-      game.pendingUno = null;
-      game.lastMove = `${winnerName} menang setelah Dragon Switch`;
-      game.turnDeadline = null;
-      return { penalized };
-    }
-  }
-
-  // Reset is deliberately not a winning card: it always leaves four new cards.
-  if (card.type !== 'dragon' || card.effect !== 'reset') {
-    if (hand.length === 0) {
-      game.winnerId = playerId;
-      room.status = 'finished';
-      game.pendingUno = null;
-      game.lastMove = `${name} memainkan ${moveLabel} — ${name} menang!`;
-      game.turnDeadline = null;
-      return { penalized };
-    }
-  }
-
   game.lastMove = `${name} memainkan ${moveLabel}`;
+  if (emptiedPlayerIds.length > 0) {
+    game.lastMove += ` — ${playerNames.join(', ')} menang dan menjadi spectator`;
+  }
   if (penalized) game.lastMove += ' · Penalti UNO +2 diterapkan';
   return { penalized };
 }
 
-function playCard(room, playerId, cardId, chosenColor, targetPlayerId) {
+function playCard(room, playerId, cardId, chosenColor, options = {}) {
   ensureTurn(room, playerId);
-  if (room.game.mode === GAME_MODES.UNOLLELE) return playUnolleleCard(room, playerId, cardId, targetPlayerId);
+  if (room.game.mode === GAME_MODES.UNOLLELE) {
+    const normalizedOptions = typeof options === 'string' ? { targetPlayerId: options } : options;
+    return playUnolleleCard(room, playerId, cardId, normalizedOptions);
+  }
   return playClassicCard(room, playerId, cardId, chosenColor);
 }
 
@@ -535,7 +690,7 @@ function timeoutTurn(room) {
   const drawn = drawCards(game, playerId, 2);
   game.turnHasDrawn = false;
   game.drawnCardId = null;
-  game.currentPlayerId = nextPlayerId(game, room, playerId, 1);
+  setNextTurn(room, playerId, 1);
   game.turnDeadline = Date.now() + TURN_DURATION_MS;
   const name = room.players.find((p) => p.id === playerId)?.name || 'Pemain';
   game.lastMove = `Waktu habis: ${name} mengambil ${drawn} kartu (+2), giliran dilewati`;
@@ -551,7 +706,7 @@ function drawOne(room, playerId) {
     const drawn = drawCards(game, playerId, 1);
     game.turnHasDrawn = false;
     game.drawnCardId = null;
-    game.currentPlayerId = nextPlayerId(game, room, playerId, 1);
+    setNextTurn(room, playerId, 1);
     game.turnDeadline = Date.now() + TURN_DURATION_MS;
     const name = room.players.find((p) => p.id === playerId)?.name || 'Pemain';
     game.lastMove = drawn > 0
@@ -582,7 +737,7 @@ function passTurn(room, playerId) {
   if (game.pendingUno) resolveUncalledUno(game);
   game.turnHasDrawn = false;
   game.drawnCardId = null;
-  game.currentPlayerId = nextPlayerId(game, room, playerId, 1);
+  setNextTurn(room, playerId, 1);
   game.turnDeadline = Date.now() + TURN_DURATION_MS;
   game.lastMove = `${room.players.find((p) => p.id === playerId)?.name || 'Pemain'} melewati giliran`;
 }
@@ -606,6 +761,7 @@ function publicState(room, viewerId) {
         name: player.name,
         connected: Boolean(player.connected),
         cardCount: room.game?.hands[player.id]?.length ?? 0,
+        isSpectator: Boolean(room.game && isSpectator(room.game, player.id)),
       })),
     },
     you: { id: viewerId },
@@ -622,6 +778,12 @@ function publicState(room, viewerId) {
     discardCount: game.discard.length,
     direction: game.direction,
     winnerId: game.winnerId,
+    winnerIds: [...(game.winnerIds || (game.winnerId ? [game.winnerId] : []))],
+    loserId: game.loserId || null,
+    isSpectator: isSpectator(game, viewerId),
+    blockedElement: game.blockedElement || null,
+    blockedByPlayerId: game.blockedByPlayerId || null,
+    discardPile: game.mode === GAME_MODES.UNOLLELE ? [...game.discard] : undefined,
     lastMove: game.lastMove,
     pendingUno: game.pendingUno,
     turnHasDrawn: currentPlayerTurn && game.turnHasDrawn,
@@ -643,6 +805,7 @@ function publicState(room, viewerId) {
         ...commonGameState,
         mode: GAME_MODES.UNOLLELE,
         currentElement: game.discard[game.discard.length - 1]?.element ?? null,
+        blockOptions: [...UNOLLELE_BLOCKABLE_ELEMENTS],
       },
     };
   }
@@ -664,6 +827,7 @@ module.exports = {
   MIN_PLAYERS,
   GAME_MODES,
   UNOLLELE_ELEMENTS,
+  UNOLLELE_BLOCKABLE_ELEMENTS,
   UNOLLELE_WEAKNESS,
   DRAGON_EFFECTS,
   DRAGON_EFFECT_COPIES,
@@ -687,6 +851,8 @@ module.exports = {
   canPlayCard,
   canPlayUnolleleCard,
   getPlayableCards,
+  activePlayerIds,
+  isSpectator,
   makeUnolleleNumberCard,
   makeDragonCard,
 };

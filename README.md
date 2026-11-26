@@ -13,7 +13,7 @@ UNO Party adalah game kartu multiplayer untuk Android. Aplikasi Flutter terhubun
 - Server menjadi sumber kebenaran untuk validasi kartu, giliran, efek, timer, main ulang, dan pemenang.
 - Setiap HP hanya menerima isi kartu miliknya; isi kartu lawan tetap tersembunyi.
 - Timer 15 detik per giliran untuk kedua mode; jika habis, pemain otomatis mengambil 2 kartu dan gilirannya dilewati.
-- Setelah permainan selesai, pemain yang masih online dapat menekan **Main Ulang** untuk membuat pertandingan baru di room dan kode yang sama; minimal dua pemain harus online.
+- Pemain yang lebih dulu menghabiskan kartu menjadi spectator dan pertandingan berlanjut sampai satu pemain terakhir kalah. Setelah itu, pemain dapat menekan **Main Ulang** di popup tengah untuk membuat pertandingan baru di room dan kode yang sama; minimal dua pemain harus online.
 - Musik latar lobby, musik pertandingan, dan musik lebih intens ketika ada pemain aktif dengan 1–2 kartu tersisa; musik dapat dimatikan dari tombol volume.
 
 ### UNO Classic
@@ -23,15 +23,17 @@ UNO Party adalah game kartu multiplayer untuk Android. Aplikasi Flutter terhubun
 - Draw Two / Wild Draw Four tidak dapat ditumpuk.
 
 ### UNOLLELE
-- Deck 132 kartu: 100 kartu Fire/Water/Grass/Electric/Ground (masing-masing angka 1–10, dua copy), 10 kartu Colorless (angka 1–10, satu copy), dan 22 kartu Dragon.
+- Deck 146 kartu: 100 kartu angka Fire/Water/Grass/Electric/Ground (angka 1–10, masing-masing dua copy), 10 Colorless 10, dan 36 Dragon.
 - Setiap pemain menerima 7 kartu awal.
-- Lima elemen dasar mengikuti aturan weakness. Colorless dapat dimainkan di atas semua tipe, termasuk Dragon; jika top pile sudah Colorless, Colorless berikutnya harus bernomor lebih tinggi.
-- Dragon dapat dimainkan di atas semua tipe selain Colorless, termasuk Dragon lain. Dragon tidak dapat dimainkan jika top pile adalah Colorless.
-- Di atas Dragon, kartu angka dari enam elemen dapat dimainkan.
-- Enam efek Dragon: Skip (4 copy), Switch Direction (4), +2 (4), Reset (4), Switch (2), dan +1 All (4). Dragon Switch menukar seluruh kartu tangan pengguna dengan pemain online yang dipilih. Dragon +1 All membuat semua pemain, termasuk pengguna kartu, mengambil satu kartu.
+- Colorless 10 dapat dimainkan di atas Fire/Water/Grass/Electric/Ground hanya jika nilainya lebih tinggi dari kartu angka di top pile; Colorless 10 juga dapat melawan semua Dragon.
+- Colorless lemah terhadap Fire/Water/Grass/Electric/Ground: kartu elemental apa pun dapat dimainkan di atas Colorless tanpa syarat angka. Dragon tidak dapat dimainkan di atas Colorless.
+- Dragon dapat dimainkan di atas kartu elemental maupun Dragon lain. Di atas Dragon, kartu angka termasuk Colorless dapat dimainkan.
+- Efek Dragon: Skip All (4), Reverse / Switch Direction (4), +2 (4), Reroll 4 (4), Switch tangan (3), +1 untuk semua pemain lain (4), Discard (4), Reset All (1), Revive (4), dan Block (4).
+- Dragon Discard membuang hingga satu kartu dari tangan ke top discard tanpa mengaktifkan efek kartu yang dibuang. Dragon Reset All membuang seluruh tangan setiap pemain aktif lalu setiap pemain aktif, termasuk penggunanya, mengambil 7 kartu; pemenang/spectator dikecualikan. Dragon Revive mengambil satu kartu pilihan dari discard pile. Dragon Block melarang satu elemen hingga giliran kembali ke pemain yang memblokir.
+- Dragon Switch menukar seluruh sisa kartu tangan dengan pemain aktif yang dipilih. Dragon +1 membuat semua pemain aktif selain pengguna kartu mengambil satu kartu.
 - Pemain boleh mengambil satu kartu meski memiliki kartu valid; setelah mengambil, giliran langsung dilewati.
-- Kartu elemental dan Dragon memiliki desain visual khusus.
-- Meja bermain menempatkan pemain melingkar sesuai urutan dan arah permainan, dengan penanda giliran dan countdown.
+- Pemain yang menghabiskan kartu menjadi pemenang dan spectator; permainan berlanjut sampai tersisa satu pemain yang dinyatakan kalah.
+- Kartu elemental dan Dragon memiliki desain visual khusus. Meja menampilkan arah putaran searah jarum jam secara default dan berlawanan arah jarum jam setelah Reverse.
 
 ## Menjalankan server di Windows
 
