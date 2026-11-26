@@ -252,7 +252,7 @@ test('Dragon Switch exchanges the remaining full hands with the selected online 
   assert.equal(room.game.discard.at(-1).id, 'switch-hand');
 });
 
-test('Dragon Switch as the final card turns the empty-handed target into a spectator', () => {
+test('Dragon Switch as the final card makes the player who played it the spectator, not the target', () => {
   const room = roomWith({
     hand: [dragon('last-switch', 'switch_hand')],
     otherHands: { p2: [number('p2-a', 'water', 1), number('p2-b', 'grass', 2)] },
@@ -261,10 +261,10 @@ test('Dragon Switch as the final card turns the empty-handed target into a spect
   engine.playCard(room, 'p1', 'last-switch', undefined, 'p2');
 
   assert.equal(room.status, 'playing');
-  assert.deepEqual(room.game.winnerIds, ['p2']);
+  assert.deepEqual(room.game.winnerIds, ['p1']);
   assert.equal(room.game.hands.p2.length, 0);
   assert.equal(room.game.hands.p1.length, 2);
-  assert.equal(room.game.currentPlayerId, 'p3');
+  assert.equal(room.game.currentPlayerId, 'p2');
 });
 
 test('Dragon Switch rejects a missing, self, or offline target without consuming the card', () => {

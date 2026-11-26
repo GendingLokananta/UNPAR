@@ -30,3 +30,12 @@
 - Build 1.2.0+4: gameplay timing, voting rematch, audio, dan meja melingkar.
 - Build 1.1.0+3: engine awal UNOLLELE dan pemilihan mode.
 - Build 1.0.1+2: Tahap 1 integrasi mode di room.
+
+## UI dan UNO hotfix
+
+- Area kontrol bawah kartu kini menyediakan tombol Deskripsi Kartu untuk UNO Classic dan UNOLLELE.
+- Tombol UNO tersedia selama jendela 500 ms; setelah itu pemain lain, termasuk spectator, dapat menembak UNO.
+- Validasi 500 ms dilakukan di server; tembakan terlalu awal ditolak.
+- Deskripsi aturan di tengah meja diperbesar agar lebih mudah dibaca.
+- Dragon Switch yang dimainkan sebagai kartu terakhir mengatribusikan kemenangan kepada pemain yang memainkan kartu, bukan target pertukaran.
+- Pengujian backend: 60/60 lulus. Build Flutter belum diverifikasi karena Flutter SDK tidak tersedia.

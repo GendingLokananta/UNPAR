@@ -33,6 +33,7 @@ const DRAGON_EFFECT_COPIES = Object.freeze({
 const DRAGON_EFFECTS = Object.freeze(Object.keys(DRAGON_EFFECT_COPIES));
 const UNOLLELE_STARTING_HAND = 7;
 const TURN_DURATION_MS = 15_000;
+const UNO_CALL_WINDOW_MS = 500;
 const UNOLLELE_DRAGON_COPIES = 4;
 
 function normalizeGameMode(value) {
@@ -149,6 +150,7 @@ function createGame(players) {
     loserId: null,
     lastMove: `${players[0].name} memulai permainan`,
     pendingUno: null,
+    pendingUnoDeadline: null,
     turnHasDrawn: false,
     drawnCardId: null,
     turnDeadline: Date.now() + TURN_DURATION_MS,
@@ -183,6 +185,7 @@ function createUnolleleGame(players) {
     blockedByPlayerId: null,
     lastMove: `${players[0].name} memulai UNOLLELE`,
     pendingUno: null,
+    pendingUnoDeadline: null,
     turnHasDrawn: false,
     drawnCardId: null,
     turnDeadline: Date.now() + TURN_DURATION_MS,
@@ -261,7 +264,7 @@ function recordPlayerWinners(room, playerIds, message) {
   for (const playerId of playerIds) {
     if (!playerId || game.winnerIds.includes(playerId)) continue;
     game.winnerIds.push(playerId);
-    if (game.pendingUno === playerId) game.pendingUno = null;
+    if (game.pendingUno === playerId) { game.pendingUno = null; game.pendingUnoDeadline = null; }
   }
   if (game.winnerIds.length > 0 && !game.winnerId) game.winnerId = game.winnerIds[0];
 
@@ -362,6 +365,7 @@ function resolveUncalledUno(game) {
   const playerId = game.pendingUno;
   if (game.hands[playerId]) drawCards(game, playerId, 2);
   game.pendingUno = null;
+  game.pendingUnoDeadline = null;
   return playerId;
 }
 
@@ -373,20 +377,21 @@ function callUno(room, playerId) {
   }
   if (game.pendingUno !== playerId) throw new Error('Belum ada UNO yang perlu kamu konfirmasi.');
   if ((game.hands[playerId] || []).length !== 1) throw new Error('UNO hanya bisa dipanggil saat kartumu tersisa satu.');
+  if (Date.now() > (game.pendingUnoDeadline || 0)) throw new Error('Waktu menekan UNO sudah habis.');
   game.pendingUno = null;
+  game.pendingUnoDeadline = null;
   game.lastMove = `${room.players.find((p) => p.id === playerId)?.name || 'Pemain'}: UNO!`;
 }
 
 function catchUno(room, catcherId) {
   const game = room.game;
   if (room.status !== 'playing' || !game.pendingUno) throw new Error('Tidak ada pemain yang belum memanggil UNO.');
-  if (isSpectator(game, catcherId)) {
-    throw new Error('Pemain spectator tidak dapat melakukan aksi gameplay.');
-  }
   if (game.pendingUno === catcherId) throw new Error('Kamu tidak bisa menangkap UNO-mu sendiri.');
+  if (Date.now() < (game.pendingUnoDeadline || 0)) throw new Error('Tunggu sampai kesempatan UNO berakhir sebelum menembak.');
   const targetId = game.pendingUno;
   drawCards(game, targetId, 2);
   game.pendingUno = null;
+  game.pendingUnoDeadline = null;
   const catcher = room.players.find((p) => p.id === catcherId);
   const target = room.players.find((p) => p.id === targetId);
   game.lastMove = `${catcher?.name || 'Pemain'} menangkap UNO ${target?.name || 'pemain'} (+2 kartu)`;
@@ -418,7 +423,7 @@ function playClassicCard(room, playerId, cardId, chosenColor) {
 
   const player = room.players.find((p) => p.id === playerId);
   const name = player?.name || 'Pemain';
-  if (hand.length === 1) game.pendingUno = playerId;
+  if (hand.length === 1) { game.pendingUno = playerId; game.pendingUnoDeadline = Date.now() + UNO_CALL_WINDOW_MS; }
 
   let steps = 1;
   if (card.value === 'skip') steps = 2;
@@ -562,6 +567,7 @@ function playUnolleleCard(room, playerId, cardId, options = {}) {
         shuffle(game.deck);
         drawCards(game, playerId, 4);
         game.pendingUno = null;
+        game.pendingUnoDeadline = null;
         moveLabel += ' (ambil 4 kartu baru)';
         break;
       }
@@ -569,14 +575,16 @@ function playUnolleleCard(room, playerId, cardId, options = {}) {
         const targetId = switchTarget.id;
         const targetName = switchTarget.name || 'Pemain';
         const targetHand = game.hands[targetId];
+        const actorPlayedLastCard = hand.length === 0;
         game.hands[playerId] = targetHand;
         game.hands[targetId] = hand;
         hand = game.hands[playerId];
         moveLabel += ` dengan ${targetName} (tukar seluruh kartu tangan)`;
-        emptiedPlayerIds = [playerId, targetId].filter((id) => game.hands[id].length === 0);
-        game.pendingUno = game.hands[playerId].length === 1
-          ? playerId
-          : (game.hands[targetId].length === 1 ? targetId : null);
+        // The player who played Dragon Switch owns the win if it was their final card.
+        // Do not award the win to the target merely because the empty hand was transferred.
+        emptiedPlayerIds = actorPlayedLastCard ? [playerId] : [];
+        game.pendingUno = null;
+        game.pendingUnoDeadline = null;
         break;
       }
       case 'draw_one_all': {
@@ -606,6 +614,7 @@ function playUnolleleCard(room, playerId, cardId, options = {}) {
           const activeHand = game.hands[activeId] || [];
           game.discard.push(...activeHand.splice(0, activeHand.length));
           game.pendingUno = null;
+          game.pendingUnoDeadline = null;
         }
         game.discard.push(resetCardOnTop);
         for (const activeId of activePlayerIds(game)) drawCards(game, activeId, 7);
@@ -638,8 +647,8 @@ function playUnolleleCard(room, playerId, cardId, options = {}) {
   }
 
   if (card.effect !== 'switch_hand') {
-    if (hand.length === 1) game.pendingUno = playerId;
-    else if (hand.length !== 1 && game.pendingUno === playerId) game.pendingUno = null;
+    if (hand.length === 1) { game.pendingUno = playerId; game.pendingUnoDeadline = Date.now() + UNO_CALL_WINDOW_MS; }
+    else if (hand.length !== 1 && game.pendingUno === playerId) { game.pendingUno = null; game.pendingUnoDeadline = null; }
   }
 
   if (hand.length === 0 && !emptiedPlayerIds.includes(playerId)) {
@@ -786,6 +795,8 @@ function publicState(room, viewerId) {
     discardPile: game.mode === GAME_MODES.UNOLLELE ? [...game.discard] : undefined,
     lastMove: game.lastMove,
     pendingUno: game.pendingUno,
+    pendingUnoDeadline: game.pendingUnoDeadline || null,
+    unoCallWindowMs: UNO_CALL_WINDOW_MS,
     turnHasDrawn: currentPlayerTurn && game.turnHasDrawn,
     drawnCardId: currentPlayerTurn ? game.drawnCardId : null,
     playableCardIds: currentPlayerTurn ? getPlayableCards(game, viewerId) : [],
@@ -834,6 +845,7 @@ module.exports = {
   UNOLLELE_STARTING_HAND,
   UNOLLELE_DRAGON_COPIES,
   TURN_DURATION_MS,
+  UNO_CALL_WINDOW_MS,
   normalizeGameMode,
   createDeck,
   createUnolleleDeck,

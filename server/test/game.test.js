@@ -10,6 +10,8 @@ const {
   GAME_MODES,
   normalizeGameMode,
   timeoutTurn,
+  callUno,
+  catchUno,
   TURN_DURATION_MS,
 } = require('../src/game');
 
@@ -39,6 +41,40 @@ test('public room state includes its selected game mode', () => {
   const roomPlayers = players(2);
   const room = { code: 'ABC234', gameMode: 'unollele', status: 'lobby', hostId: roomPlayers[0].id, players: roomPlayers };
   assert.equal(publicState(room, roomPlayers[0].id).room.gameMode, 'unollele');
+});
+
+
+test('UNO call has a 500ms window and spectators may shoot after it expires', () => {
+  const roomPlayers = players(4);
+  const game = createGame(roomPlayers);
+  const actor = game.currentPlayerId;
+  const catcher = roomPlayers.find((player) => player.id !== actor).id;
+  game.currentColor = 'red';
+  game.currentValue = '5';
+  game.discard = [{ id: 'uno-top', color: 'red', value: '5' }];
+  game.hands[actor] = [{ id: 'last-red', color: 'red', value: '6' }, { id: 'spare', color: 'blue', value: '1' }];
+  game.deck = [{ id: 'penalty-a', color: 'green', value: '2' }, { id: 'penalty-b', color: 'yellow', value: '3' }];
+  const room = { code: 'UNO500', gameMode: 'classic', status: 'playing', hostId: roomPlayers[0].id, players: roomPlayers, game };
+  playCard(room, actor, 'last-red');
+  assert.equal(game.pendingUno, actor);
+  assert.equal(game.pendingUnoDeadline - Date.now() <= 500, true);
+  assert.throws(() => catchUno(room, catcher), /Tunggu/);
+  game.pendingUnoDeadline = Date.now() - 1;
+  game.winnerIds = [catcher]; // catcher is now a spectator but may still shoot UNO.
+  assert.doesNotThrow(() => catchUno(room, catcher));
+  assert.equal(game.hands[actor].length, 3);
+  assert.equal(game.pendingUno, null);
+});
+
+test('player cannot call UNO after the 500ms grace period', () => {
+  const roomPlayers = players(2);
+  const game = createGame(roomPlayers);
+  const actor = game.currentPlayerId;
+  game.hands[actor] = [{ id: 'one-card', color: 'red', value: '1' }];
+  game.pendingUno = actor;
+  game.pendingUnoDeadline = Date.now() - 1;
+  const room = { code: 'UNO-LATE', gameMode: 'classic', status: 'playing', hostId: roomPlayers[0].id, players: roomPlayers, game };
+  assert.throws(() => callUno(room, actor), /Waktu menekan UNO sudah habis/);
 });
 
 test('classic deck contains 108 cards', () => {

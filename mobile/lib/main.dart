@@ -279,6 +279,61 @@ class LobbyScreen extends StatelessWidget {
   final GameController controller;
   final MusicManager music;
 
+  Future<void> _showCardDescriptions(BuildContext context, bool isUnollele) async {
+    final entries = isUnollele
+        ? <(String, String)>[
+            ('Kartu Elemental', 'Mainkan kartu dengan angka lebih tinggi pada elemen yang sama, atau manfaatkan hubungan weakness antar elemen.'),
+            ('Colorless 10', 'Dapat melawan Dragon atau kartu elemental dengan angka di bawah 10. Colorless dapat dikalahkan oleh kartu elemental angka berapa pun.'),
+            ('Dragon Skip All', 'Melewati pemain lain dan mempertahankan giliran sesuai aturan Dragon Skip All.'),
+            ('Dragon Reverse', 'Membalik arah permainan.'),
+            ('Dragon +2', 'Pemain berikutnya mengambil 2 kartu dan gilirannya dilewati.'),
+            ('Dragon Reroll 4', 'Buang sisa kartu tangan ke deck, kocok, lalu ambil 4 kartu baru.'),
+            ('Dragon Switch', 'Tukar seluruh kartu tangan dengan pemain aktif yang dipilih.'),
+            ('Dragon +1 All', 'Semua pemain aktif selain pemain yang memainkan kartu mengambil 1 kartu.'),
+            ('Dragon Discard', 'Buang hingga 1 kartu dari tangan ke discard pile tanpa mengaktifkan efek kartu yang dibuang.'),
+            ('Dragon Reset All', 'Semua pemain aktif membuang tangan lalu mengambil 7 kartu baru. Spectator tidak terkena efek.'),
+            ('Dragon Revive', 'Pilih 1 kartu dari discard pile untuk diambil ke tangan. Jika kartu ini menghabiskan tangan, langsung menang.'),
+            ('Dragon Block', 'Pilih satu elemen yang tidak boleh dimainkan sampai giliran kembali kepada pemain yang memblokir.'),
+          ]
+        : <(String, String)>[
+            ('Kartu Angka', 'Mainkan jika warna atau angka cocok dengan kartu teratas.'),
+            ('Skip', 'Melewati giliran pemain berikutnya.'),
+            ('Reverse', 'Membalik arah permainan.'),
+            ('Draw 2', 'Pemain berikutnya mengambil 2 kartu dan kehilangan giliran.'),
+            ('Wild', 'Pilih warna aktif berikutnya.'),
+            ('Wild Draw 4', 'Pilih warna; pemain berikutnya mengambil 4 kartu dan kehilangan giliran.'),
+          ];
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: panelColor,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 18, 18, 24),
+          child: SizedBox(
+            height: MediaQuery.of(sheetContext).size.height * .68,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('DESKRIPSI KARTU', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 1)),
+              const SizedBox(height: 12),
+              Expanded(child: ListView.separated(
+                itemCount: entries.length,
+                separatorBuilder: (_, __) => const Divider(color: Colors.white12),
+                itemBuilder: (_, index) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(entries[index].$1, style: const TextStyle(fontWeight: FontWeight.w900, color: accentColor)),
+                    const SizedBox(height: 4),
+                    Text(entries[index].$2, style: const TextStyle(fontSize: 13, height: 1.4, color: Colors.white80)),
+                  ]),
+                ),
+              )),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final room = controller.room;
@@ -741,6 +796,15 @@ class GameScreen extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
             decoration: const BoxDecoration(color: Color(0xFF181D29), border: Border(top: BorderSide(color: Colors.white10))),
             child: Column(children: [
+              if (room['status'] == 'playing') ...[
+                SizedBox(width: double.infinity, child: OutlinedButton.icon(
+                  onPressed: () => _showCardDescriptions(context, isUnollele),
+                  icon: const Icon(Icons.info_outline_rounded, size: 18),
+                  label: const Text('DESKRIPSI KARTU'),
+                  style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white30), minimumSize: const Size.fromHeight(38), textStyle: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: .7)),
+                )),
+                const SizedBox(height: 8),
+              ],
               if (room['status'] == 'finished')
                 const SizedBox.shrink()
               else if (isWinner)
@@ -776,14 +840,13 @@ class GameScreen extends StatelessWidget {
                   ]),
                 if (isUnollele && myTurn)
                   const Padding(padding: EdgeInsets.only(top: 6), child: Text('Kamu boleh mengambil kartu meski masih punya kartu yang bisa dimainkan.', textAlign: TextAlign.center, style: TextStyle(fontSize: 10, color: Colors.white54))),
-                if (pendingUno != null && !isWinner) ...[
-                  const SizedBox(height: 8),
-                  SizedBox(width: double.infinity, child: FilledButton(
-                    onPressed: pendingUno == controller.myId ? controller.callUno : controller.catchUno,
-                    style: FilledButton.styleFrom(backgroundColor: pendingUno == controller.myId ? yellowCard : redCard, foregroundColor: Colors.black, minimumSize: const Size.fromHeight(42)),
-                    child: Text(pendingUno == controller.myId ? 'UNO!' : 'TANGKAP UNO (+2)', style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1)),
-                  )),
-                ],
+              ],
+              if (pendingUno != null && room['status'] == 'playing' && pendingUno != controller.myId) ...[
+                const SizedBox(height: 8),
+                UnoShootButton(key: ValueKey('${pendingUno}_${game['pendingUnoDeadline']}'), onShoot: controller.catchUno),
+              ] else if (pendingUno != null && room['status'] == 'playing' && pendingUno == controller.myId && !isWinner) ...[
+                const SizedBox(height: 8),
+                UnoCallButton(onCall: controller.callUno, key: ValueKey('${pendingUno}_${game['pendingUnoDeadline']}')),
               ],
               if (controller.notice.isNotEmpty) ...[const SizedBox(height: 8), NoticeBanner(text: controller.notice, isError: controller.noticeIsError)],
             ]),
@@ -913,9 +976,9 @@ class GameScreen extends StatelessWidget {
         const SizedBox(height: 6),
         TurnCountdown(deadline: (game['turnDeadline'] as num?)?.toInt(), active: !isFinished),
         const SizedBox(height: 4),
-        Text(game['lastMove']?.toString() ?? 'Permainan dimulai', maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60, fontSize: 8, height: 1.2)),
+        Text(game['lastMove']?.toString() ?? 'Permainan dimulai', maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60, fontSize: 10, height: 1.3)),
         if (isUnollele && topCard.isNotEmpty)
-          Text(_unolleleRuleHint(topCard), maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFFD6C1FF), fontSize: 7, height: 1.15)),
+          Text(_unolleleRuleHint(topCard), maxLines: 3, overflow: TextOverflow.visible, textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFFD6C1FF), fontSize: 10, height: 1.3)),
         if (isUnollele && game['blockedElement'] != null)
           Text('BLOCK: ${game['blockedElement'].toString().toUpperCase()} • sampai giliran pemain pemblokir', maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFFFF9B9B), fontSize: 7, fontWeight: FontWeight.w800, height: 1.15)),
         if (game['pendingUno'] != null)
@@ -923,6 +986,67 @@ class GameScreen extends StatelessWidget {
       ]),
     );
   }
+}
+
+class UnoCallButton extends StatefulWidget {
+  const UnoCallButton({super.key, required this.onCall});
+  final VoidCallback onCall;
+
+  @override
+  State<UnoCallButton> createState() => _UnoCallButtonState();
+}
+
+class _UnoCallButtonState extends State<UnoCallButton> {
+  bool _expired = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future<void>.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) setState(() => _expired = true);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: double.infinity,
+    child: FilledButton(
+      onPressed: _expired ? null : widget.onCall,
+      style: FilledButton.styleFrom(backgroundColor: yellowCard, foregroundColor: Colors.black, disabledBackgroundColor: Colors.white12, disabledForegroundColor: Colors.white54, minimumSize: const Size.fromHeight(44)),
+      child: Text(_expired ? 'WAKTU UNO HABIS' : 'UNO!', style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1)),
+    ),
+  );
+}
+
+class UnoShootButton extends StatefulWidget {
+  const UnoShootButton({super.key, required this.onShoot});
+  final VoidCallback onShoot;
+
+  @override
+  State<UnoShootButton> createState() => _UnoShootButtonState();
+}
+
+class _UnoShootButtonState extends State<UnoShootButton> {
+  bool _ready = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future<void>.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) setState(() => _ready = true);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: double.infinity,
+    child: FilledButton.icon(
+      onPressed: _ready ? widget.onShoot : null,
+      icon: const Icon(Icons.gps_fixed_rounded),
+      label: Text(_ready ? 'TEMBAK UNO (+2)' : 'TUNGGU 0,5 DETIK...'),
+      style: FilledButton.styleFrom(backgroundColor: redCard, foregroundColor: Colors.white, disabledBackgroundColor: Colors.white12, disabledForegroundColor: Colors.white54, minimumSize: const Size.fromHeight(44), textStyle: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: .6)),
+    ),
+  );
 }
 
 class CircularGameTable extends StatelessWidget {
