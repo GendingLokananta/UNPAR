@@ -503,7 +503,10 @@ function playUnolleleCard(room, playerId, cardId, options = {}) {
 
   let reviveCard = null;
   if (card.type === 'dragon' && card.effect === 'revive' && hand.length > 1) {
-    reviveCard = game.discard.find((item) => item.id === reviveCardId) || null;
+    // Resolve the target before the played Revive card enters the discard pile.
+    // A card cannot recover itself through its own effect.
+    reviveCard = game.discard.find((item) =>
+      item.id === reviveCardId && item.id !== card.id) || null;
     if (!reviveCard) throw new Error('Pilih satu kartu dari discard pile untuk Dragon Revive.');
   }
 

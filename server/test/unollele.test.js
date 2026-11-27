@@ -495,6 +495,19 @@ test('Dragon Revive as the last card skips recovery and makes its player a spect
   assert.equal(room.status, 'playing');
 });
 
+test('Dragon Revive as the last card never recovers any discarded card', () => {
+  const room = roomWith({ hand: [dragon('last-revive-self', 'revive')] });
+  room.game.discard.push(number('older-discard-card', 'grass', 3));
+
+  engine.playCard(room, 'p1', 'last-revive-self');
+
+  assert.deepEqual(room.game.winnerIds, ['p1']);
+  assert.equal(room.game.hands.p1.length, 0);
+  assert.equal(room.game.discard.at(-1).id, 'last-revive-self');
+  assert.equal(room.game.hands.p1.some((card) => card.id === 'last-revive-self'), false);
+  assert.equal(room.game.hands.p1.some((card) => card.id === 'older-discard-card'), false);
+});
+
 test('Dragon Block prevents the selected element and ends as soon as direction returns to its owner', () => {
   const room = roomWith({
     hand: [dragon('block', 'block'), number('p1-held', 'fire', 1)],
